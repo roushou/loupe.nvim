@@ -1,0 +1,6 @@
+# Test artifacts
+*.log
+.luarc.json
+
+# Editor
+.nvim/

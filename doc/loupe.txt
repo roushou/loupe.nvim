@@ -1,0 +1,137 @@
+*loupe.txt*   A bottom-docked fuzzy picker with a live preview
+
+==============================================================================
+CONTENTS                                                *loupe-contents*
+
+  1. Introduction ........................ |loupe-introduction|
+  2. Setup ............................... |loupe-setup|
+  3. Commands ............................ |loupe-commands|
+  4. Sources ............................. |loupe-sources|
+  5. Configuration ....................... |loupe-configuration|
+  6. Actions ............................. |loupe-actions|
+  7. Health .............................. |loupe-health|
+  8. Lua API ............................. |loupe-api|
+
+==============================================================================
+1. INTRODUCTION                                          *loupe-introduction*
+
+Loupe is a bottom-docked fuzzy finder with a full-viewport live preview. It is
+source-based: the source menu changes *what* is searched, while matching,
+previewing and actions stay the same.
+
+Browsing never opens a file buffer — files are read into a scratch buffer, and
+only the choose actions create real buffers.
+
+Requires Neovim 0.11+ and the external tools `fd`, `rg` and `git` (each
+optional; Loupe degrades gracefully). A Nerd Font is needed for the icons.
+
+==============================================================================
+2. SETUP                                                       *loupe-setup*
+
+>lua
+    require("loupe").setup({
+      default_source = "files",
+      trash = true,
+    })
+<
+
+`setup()` is optional; defaults apply if it is never called. See
+|loupe-configuration|.
+
+==============================================================================
+3. COMMANDS                                                 *loupe-commands*
+
+:Loupe [source]         Open the picker, optionally on a specific source, e.g.
+                        `:Loupe grep`, `:Loupe symbols`, `:Loupe buffers`.
+
+Loupe deliberately does not create any global keymaps. Suggested:
+
+>lua
+    vim.keymap.set("n", "<C-p>", function() require("loupe").open() end)
+    vim.keymap.set("n", "<leader>fw", function()
+      require("loupe").open({ source = "grep" })
+    end)
+    vim.keymap.set("n", "<leader>ss", function()
+      require("loupe").open({ source = "doc_symbols" })
+    end)
+<
+
+==============================================================================
+4. SOURCES                                                   *loupe-sources*
+
+Switch sources with the source menu (`<C-o>`).
+
+  f  files          `fd` -> `rg` -> `git`      project files
+  d  dirs           `fd`                        directories; <CR> descends
+  b  buffers        builtin                     open buffers
+  r  recent         frecency store              recently/frequently opened
+  c  changed        `git status`                staged/unstaged/untracked
+  g  grep           `rg` -> `git grep`          live content search
+  s  symbols        LSP workspace/symbol        live
+  t  doc_symbols    LSP textDocument/documentSymbol
+  e  diagnostics    vim.diagnostic
+
+`grep` and `symbols` re-query on each keystroke (debounced); the preview jumps
+to the match. Choosing a symbol or diagnostic jumps to its location.
+
+==============================================================================
+5. CONFIGURATION                                         *loupe-configuration*
+
+`require("loupe").setup(opts)` deep-merges over the defaults. Every keybinding
+is data; set a value to `false` to unbind. See `lua/loupe/config.lua` for the
+full set.
+
+>lua
+    require("loupe").setup({
+      height = function() return math.max(8, math.floor(vim.o.lines * 0.33)) end,
+      max_results = 200,
+      default_source = "files",
+      root = function() ... end,
+      backend = "ripgrep",          -- matcher engine: "ripgrep" | "fff"
+      backends = { files = { "fd", "rg", "git" }, grep = { "rg", "git" } },
+      preview = { enabled = true, max_lines = 2000, diagnostics = true },
+      icons = true,
+      git = true,
+      frecency = true,
+      trash = true,
+      prompt = "> ",
+      prompt_caret = "▏",
+      mappings = { browse = { ... }, menu = { ... }, sources = { ... }, prompt = { ... } },
+    })
+<
+
+Mappings are grouped by context: `browse` (result list), `menu` (the `<C-x>`
+action submenu), `sources` (the `<C-o>` source menu) and `prompt` (inline text
+prompts). Keys may use any notation Neovim understands (`<C-s>` == `<C-S>`).
+
+==============================================================================
+6. ACTIONS                                                   *loupe-actions*
+
+Open the action menu with `<C-x>`:
+
+  r  rename / move       d  delete (to trash)     a  add (trailing `/` = dir)
+  c  duplicate           y  yank absolute path    Y  yank relative path
+  n  yank filename       D  yank parent dir        o  open with OS handler
+  q  quickfix (marked or current)
+
+<Tab> marks an entry; marks feed `quickfix`.
+
+==============================================================================
+7. HEALTH                                                     *loupe-health*
+
+>vim
+    :checkhealth loupe
+<
+reports external tools, the resolved enumeration backends and matcher, and the
+resolved project root.
+
+==============================================================================
+8. LUA API                                                       *loupe-api*
+
+loupe.setup({opts})         Configure. See |loupe-configuration|.
+loupe.open({opts})          Open. `opts.source` selects the initial source.
+loupe.close()               Close.
+loupe.toggle({opts})        Toggle.
+loupe.is_active()           Whether the picker is open.
+
+vim:tw=78:ts=8:ft=help:norl:

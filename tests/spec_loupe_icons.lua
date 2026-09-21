@@ -1,0 +1,30 @@
+local h = require("tests.harness")
+local icons = require("loupe.icons")
+
+h.test("a known filetype gets a glyph and group", function()
+	local glyph, hl = icons.get({ rel = "src/main.lua", dir = false })
+	h.ok(glyph ~= "")
+	h.eq(type(hl), "string")
+end)
+
+h.test("unknown files fall back to the generic file glyph", function()
+	local glyph = icons.get({ rel = "src/thing.unknownext", dir = false })
+	h.eq(glyph, "󰈔")
+end)
+
+h.test("directories use the Directory group", function()
+	local _, hl = icons.get({ rel = "src", dir = true })
+	h.eq(hl, "Directory")
+end)
+
+h.test("for_candidate prefers an explicit icon", function()
+	local glyph, hl = icons.for_candidate({ rel = "a.lua", dir = false, icon = "X", icon_hl = "Function" })
+	h.eq(glyph, "X")
+	h.eq(hl, "Function")
+end)
+
+h.test("for_candidate falls back to the filetype glyph", function()
+	local glyph, hl = icons.for_candidate({ rel = "a.lua", dir = false })
+	h.eq(glyph, "󰢱")
+	h.eq(hl, "Function")
+end)

@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the GitHub release + attach the rockspec
+
+jobs:
+  luarocks:
+    name: Publish to LuaRocks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: LuaRocks release
+        uses: nvim-neorocks/luarocks-tag-release@v7
+        env:
+          LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
+        with:
+          name: loupe.nvim
+          summary: "A bottom-docked fuzzy finder with a full-viewport live preview"
+          detailed_description: |
+            Loupe is a source-based fuzzy finder for Neovim: files, directories,
+            buffers, recent, changed, live grep, symbols and diagnostics, with a
+            full-viewport preview and file actions. Browsing never opens a file
+            buffer; only the choose actions create real buffers.
+          license: "MIT"
+          labels: "neovim picker fuzzy-finder"
+          # Non-Lua dirs that must ship with the rock.
+          copy_directories: |
+            doc
+            plugin
