@@ -58,7 +58,7 @@ vim.keymap.set("n", "<leader>ss", function() require("loupe").open({ source = "d
 | `<CR>` | Open |
 | `<C-s>` / `<C-v>` / `<C-t>` | Open in split / vsplit / tab |
 | `<C-o>` | Source menu (`f d b r c g s t e`) |
-| `<C-x>` | Action menu (`r` rename, `d` delete, `a` add, `c` duplicate, `y` yank, `o` open externally, `q` quickfix) |
+| `<C-x>` | Action menu (`r` rename, `d` delete, `a` add, `c` duplicate, `y`/`Y`/`n`/`D` yank path/relative/name/dir, `o` open externally, `q` quickfix) |
 | `<Tab>` | Mark (marks feed quickfix) |
 | `<C-r>` | Jump back to the project root |
 | `<BS>` | On an empty query, go up a directory |
@@ -66,6 +66,14 @@ vim.keymap.set("n", "<leader>ss", function() require("loupe").open({ source = "d
 | `<Esc>` / `<C-c>` | Close |
 
 `:Loupe [source]` opens a specific source (`:Loupe grep`, `:Loupe symbols`, …).
+
+## API
+
+- `require("loupe").setup(opts)` — configure (see below)
+- `.open({ source = "grep" })` — open, optionally on a source
+- `.close()`, `.toggle()`, `.is_active()`
+
+Full reference: `:help loupe`.
 
 ## Configuration
 
