@@ -36,11 +36,17 @@ h.test("delete removes the file and its candidate", function()
 	h.eq(#session.candidates, 0)
 end)
 
-h.test("delete refuses directories", function()
+h.test("delete refuses directories when trash is disabled", function()
+	-- Trash availability is environment-dependent (gio/trash-cli), so pin the
+	-- non-trash path to make the assertion deterministic.
+	local config = require("loupe.config")
+	config.setup({ trash = false })
 	local root = tmpdir()
 	vim.fn.mkdir(root .. "/sub", "p")
 	local cand = { rel = "sub", abs = root .. "/sub", dir = true }
-	h.eq(action.delete({ session = { candidates = { cand } }, item = { cand = cand }, root = root }), false)
+	local result = action.delete({ session = { candidates = { cand } }, item = { cand = cand }, root = root })
+	config.setup({})
+	h.eq(result, false)
 	h.eq(vim.fn.isdirectory(root .. "/sub"), 1)
 end)
 
