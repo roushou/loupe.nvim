@@ -10,10 +10,10 @@
 --- mirrors the editor's gutter/wrap options, so buffer tabs stay visible and
 --- line numbers line up with regular windows.
 
-local file = require("loupe.support.file")
-local buf = require("loupe.support.buf")
-local win = require("loupe.support.win")
-local hl = require("loupe.support.hl")
+local file = require("loupe.util.file")
+local buf = require("loupe.util.buf")
+local win = require("loupe.util.win")
+local hl = require("loupe.util.hl")
 
 local M = {}
 

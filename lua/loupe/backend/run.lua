@@ -4,7 +4,7 @@
 --- relies on: line splitting and a success flag so callers can fall back to
 --- the next preferred backend when a tool is missing or fails.
 
-local proc = require("loupe.support.proc")
+local proc = require("loupe.util.proc")
 
 local M = {}
 

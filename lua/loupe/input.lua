@@ -13,7 +13,7 @@
 --- `start_prompt`, `set_source`, `run_action`, `mouse_select`, `yank`,
 --- `go_parent`, `go_root`, `toggle_mark`, `quickfix`, `open_external`.
 
-local tf = require("loupe.support.textfield")
+local tf = require("loupe.util.textfield")
 local config = require("loupe.config")
 local keymap = require("loupe.keymap")
 

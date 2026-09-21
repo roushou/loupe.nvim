@@ -6,7 +6,7 @@
 
 local M = {}
 
-local proc = require("loupe.support.proc")
+local proc = require("loupe.util.proc")
 
 local function tokens(s)
 	local out, i = {}, 1

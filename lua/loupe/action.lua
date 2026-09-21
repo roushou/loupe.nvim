@@ -5,7 +5,7 @@
 --- for a plain mutation), and nil/false when nothing changed.
 
 local config = require("loupe.config")
-local notify = require("loupe.support.notify").scoped("loupe")
+local notify = require("loupe.util.notify").scoped("loupe")
 
 local M = {}
 

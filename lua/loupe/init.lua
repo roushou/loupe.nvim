@@ -18,8 +18,8 @@ local preview = require("loupe.preview")
 local frecency = require("loupe.frecency")
 local git = require("loupe.git")
 local action = require("loupe.action")
-local tf = require("loupe.support.textfield")
-local debounce = require("loupe.support.debounce")
+local tf = require("loupe.util.textfield")
+local debounce = require("loupe.util.debounce")
 local input = require("loupe.input")
 
 local M = {}

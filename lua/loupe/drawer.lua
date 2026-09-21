@@ -4,9 +4,9 @@
 --- disk). Rendering is a full redraw on each key: prompt line + one line per
 --- ranked match, with matched characters, icons and git markers highlighted.
 
-local hl = require("loupe.support.hl")
-local buf = require("loupe.support.buf")
-local win = require("loupe.support.win")
+local hl = require("loupe.util.hl")
+local buf = require("loupe.util.buf")
+local win = require("loupe.util.win")
 local icons = require("loupe.icons")
 
 local M = {}
