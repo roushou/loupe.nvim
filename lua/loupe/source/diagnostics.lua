@@ -6,7 +6,6 @@
 return {
 	name = "diagnostics",
 	label = "Diagnostics",
-	tab = "Diags",
 	icon = "󰀪",
 	backend = { "nvim" },
 }
