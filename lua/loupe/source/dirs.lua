@@ -9,6 +9,7 @@ return {
 	name = "dirs",
 	label = "Directories",
 	icon = "",
+	cache = true,
 	list = function(ctx, cb)
 		backend.list(ctx, "dirs", function(cands)
 			cb(cands, true)

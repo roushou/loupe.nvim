@@ -9,6 +9,7 @@ return {
 	name = "files",
 	label = "Files",
 	icon = "",
+	cache = true,
 	list = function(ctx, cb)
 		backend.list(ctx, "files", function(cands)
 			cb(cands, true)

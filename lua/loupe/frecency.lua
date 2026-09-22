@@ -6,17 +6,20 @@
 
 local M = {}
 
-local state_path = vim.fn.stdpath("state") .. "/loupe_frecency.json"
+--- Store location; tests point it elsewhere.
+M.path = vim.fn.stdpath("state") .. "/loupe_frecency.json"
 
 --- @type table<string, { count: number, last: number }>|nil
 local data = nil
+local loaded_from = nil
 
 local function load()
-	if data then
+	if data and loaded_from == M.path then
 		return data
 	end
 	data = {}
-	local ok, lines = pcall(vim.fn.readfile, state_path)
+	loaded_from = M.path
+	local ok, lines = pcall(vim.fn.readfile, M.path)
 	if ok and lines and lines[1] then
 		local okd, decoded = pcall(vim.json.decode, table.concat(lines, "\n"))
 		if okd and type(decoded) == "table" then
@@ -27,7 +30,7 @@ local function load()
 end
 
 local function save()
-	local f = io.open(state_path, "w")
+	local f = io.open(M.path, "w")
 	if not f then
 		return
 	end
@@ -65,16 +68,54 @@ function M.score(abs)
 	return (entry.count or 0) * 10 + recency
 end
 
+--- Frecency scores of the candidates that have one, computed once.
+local function scores(cands)
+	local d = load()
+	local out = {}
+	for _, c in ipairs(cands) do
+		if d[c.abs] then
+			out[c.abs] = M.score(c.abs)
+		end
+	end
+	return out
+end
+
 --- Sort candidates by frecency (then alphabetically). Returns the same table.
 function M.sort(cands)
+	local s = scores(cands)
 	table.sort(cands, function(a, b)
-		local sa, sb = M.score(a.abs), M.score(b.abs)
+		local sa, sb = s[a.abs] or 0, s[b.abs] or 0
 		if sa ~= sb then
 			return sa > sb
 		end
 		return a.rel < b.rel
 	end)
 	return cands
+end
+
+--- Move the scored candidates to the front of an otherwise sorted list,
+--- keeping the rest in place. Linear, for lists `sort` already ordered.
+--- Returns a new table.
+function M.promote(cands)
+	local s = scores(cands)
+	if next(s) == nil then
+		return cands
+	end
+	local top, rest = {}, {}
+	for _, c in ipairs(cands) do
+		if s[c.abs] then
+			top[#top + 1] = c
+		else
+			rest[#rest + 1] = c
+		end
+	end
+	table.sort(top, function(a, b)
+		if s[a.abs] ~= s[b.abs] then
+			return s[a.abs] > s[b.abs]
+		end
+		return a.rel < b.rel
+	end)
+	return vim.list_extend(top, rest)
 end
 
 --- Candidates for files under `root`, most recent/frequent first.

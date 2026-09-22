@@ -15,6 +15,7 @@ for _, spec in ipairs({
 	"tests.spec_loupe_keymap",
 	"tests.spec_loupe_action",
 	"tests.spec_loupe_stream",
+	"tests.spec_loupe_cache",
 }) do
 	require(spec)
 end

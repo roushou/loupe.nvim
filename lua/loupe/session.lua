@@ -14,6 +14,7 @@ local source = require("loupe.source")
 local drawer = require("loupe.drawer")
 local preview = require("loupe.preview")
 local frecency = require("loupe.frecency")
+local cache = require("loupe.cache")
 local git = require("loupe.git")
 local action = require("loupe.action")
 local tf = require("loupe.util.textfield")
@@ -272,22 +273,39 @@ function reload()
 		return
 	end
 
-	S.loaded = false
-	S.matches = {}
-	S.index = 0
+	-- A cached enumeration renders at once; the fresh one replaces it below.
+	local cached = src.cache and cache.get(root, src.name)
+	if cached then
+		S.candidates = (cfg.frecency and src.name == "files") and frecency.promote(cached) or cached
+		S.loaded = true
+		S.index = 1
+		refresh()
+	else
+		S.loaded = false
+		S.matches = {}
+		S.index = 0
+	end
 	drawer.render(S, cfg)
 	vim.cmd("redraw")
 
 	source.load(src, { root = root, buf = session.origin_buf, name = src.name }, function(cands)
-		if S ~= session or S.root ~= root or S.source ~= src then
-			return
-		end
 		if cfg.frecency and src.name == "files" then
 			cands = frecency.sort(cands)
 		end
+		-- worth keeping even when the picker was closed before it arrived
+		if src.cache then
+			cache.put(root, src.name, cands)
+		end
+		if S ~= session or S.root ~= root or S.source ~= src then
+			return
+		end
+		local keep = cached and current()
 		S.candidates = cands
 		S.loaded = true
 		refresh()
+		if keep then
+			focus(keep.cand.rel)
+		end
 		render()
 	end)
 

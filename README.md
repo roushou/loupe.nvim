@@ -67,6 +67,9 @@ vim.keymap.set("n", "<leader>ss", function() require("loupe").open({ source = "d
 
 `:Loupe [source]` opens a specific source (`:Loupe grep`, `:Loupe symbols`, …).
 
+Reopening renders the last file list at once and refreshes it in the
+background.
+
 ## API
 
 - `require("loupe").setup(opts)` — configure (see below)

@@ -78,6 +78,9 @@ to the match. Choosing a symbol or diagnostic jumps to its location.
 once `max_results` have arrived (the title shows `N+`; `…` while running). A
 new keystroke stops the running search before starting the next.
 
+`files` and `dirs` are cached per root: reopening the picker shows the last
+list immediately while a fresh enumeration replaces it in the background.
+
 ==============================================================================
 5. CONFIGURATION                                         *loupe-configuration*
 
