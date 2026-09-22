@@ -128,6 +128,10 @@ Open the action menu with `<C-x>`:
   n  yank filename       D  yank parent dir        o  open with OS handler
   q  quickfix (marked or current)
 
+In the `buffers` source `d` closes the buffer and leaves the file on disk
+alone; a buffer with unsaved changes asks first. Windows showing it switch to
+another buffer, so the layout stays as it was.
+
 <Tab> marks an entry; marks feed `quickfix`.
 
 ==============================================================================

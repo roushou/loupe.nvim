@@ -56,14 +56,25 @@ function M.open(height)
 	return { win = winid, buf = bufnr }
 end
 
+--- Name an action as the active source performs it, so the hint never
+--- promises something the key does not do (`delete` closes a buffer in the
+--- buffers source).
+function M.action_label(session, name)
+	if name == "delete" and session.source and session.source.delete == "buffer" then
+		return "close"
+	end
+	return name
+end
+
 --- Sorted `[key]action` hints for a mapping context.
-local function menu_hints(cfg, context)
+local function menu_hints(session, cfg, context)
 	local map = (cfg.mappings and cfg.mappings[context]) or {}
 	local keys = vim.tbl_keys(map)
 	table.sort(keys)
 	local parts = {}
 	for _, k in ipairs(keys) do
-		parts[#parts + 1] = "[" .. k .. "]" .. tostring(map[k])
+		local name = context == "menu" and M.action_label(session, map[k]) or map[k]
+		parts[#parts + 1] = "[" .. k .. "]" .. tostring(name)
 	end
 	return "   " .. table.concat(parts, "  ")
 end
@@ -85,9 +96,9 @@ local function header(session, cfg)
 	local caret_start = #text
 	text = text .. caret .. vim.fn.strcharpart(query, c)
 	if session.menu == "actions" then
-		text = text .. menu_hints(cfg, "menu")
+		text = text .. menu_hints(session, cfg, "menu")
 	elseif session.menu == "sources" then
-		text = text .. menu_hints(cfg, "sources")
+		text = text .. menu_hints(session, cfg, "sources")
 	end
 	return text, #cfg.prompt, caret_start
 end

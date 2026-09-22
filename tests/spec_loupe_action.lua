@@ -98,3 +98,63 @@ h.test("quickfix fills the list with 1-based columns", function()
 	h.eq(qf[1].lnum, 3)
 	h.eq(qf[1].col, 3)
 end)
+
+h.test("close_buffer closes the buffer and leaves the file on disk", function()
+	local root = tmpdir()
+	local path = root .. "/a.lua"
+	vim.fn.writefile({ "x" }, path)
+	local buf = vim.fn.bufadd(path)
+	vim.fn.bufload(buf)
+	local cand = { rel = "a.lua", abs = path, bufnr = buf, dir = false }
+	local session = { candidates = { cand } }
+
+	h.ok(action.close_buffer({ session = session, item = { cand = cand }, root = root }))
+	h.eq(vim.api.nvim_buf_is_valid(buf), false)
+	h.eq(vim.fn.filereadable(path), 1, "the file was deleted")
+	h.eq(#session.candidates, 0)
+end)
+
+h.test("close_buffer refuses a modified buffer unless forced", function()
+	local root = tmpdir()
+	local path = root .. "/b.lua"
+	vim.fn.writefile({ "x" }, path)
+	local buf = vim.fn.bufadd(path)
+	vim.fn.bufload(buf)
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "edited" })
+	local cand = { rel = "b.lua", abs = path, bufnr = buf, dir = false }
+	local ctx = { session = { candidates = { cand } }, item = { cand = cand }, root = root }
+
+	h.eq(action.close_buffer(ctx), false)
+	h.eq(vim.api.nvim_buf_is_valid(buf), true)
+	h.ok(action.close_buffer(ctx, true))
+	h.eq(vim.api.nvim_buf_is_valid(buf), false)
+	h.eq(vim.fn.filereadable(path), 1)
+end)
+
+h.test("close_buffer drops a candidate whose buffer is already gone", function()
+	local cand = { rel = "gone.lua", abs = "/x/gone.lua", bufnr = 9999, dir = false }
+	local session = { candidates = { cand } }
+	h.ok(action.close_buffer({ session = session, item = { cand = cand }, root = "/x" }))
+	h.eq(#session.candidates, 0)
+end)
+
+h.test("close_buffer keeps the windows that showed the buffer", function()
+	local root = tmpdir()
+	local path = root .. "/c.lua"
+	vim.fn.writefile({ "x" }, path)
+	vim.cmd("edit " .. vim.fn.fnameescape(path))
+	local buf = vim.api.nvim_get_current_buf()
+	vim.cmd("split")
+	local before = #vim.api.nvim_list_wins()
+	local wins = vim.fn.win_findbuf(buf)
+	h.eq(#wins, 2)
+
+	local cand = { rel = "c.lua", abs = path, bufnr = buf, dir = false }
+	h.ok(action.close_buffer({ session = { candidates = { cand } }, item = { cand = cand }, root = root }))
+	h.eq(#vim.api.nvim_list_wins(), before, "a window was closed with the buffer")
+	for _, win in ipairs(wins) do
+		h.ok(vim.api.nvim_win_is_valid(win), "window closed")
+		h.ok(vim.api.nvim_win_get_buf(win) ~= buf, "window still shows the closed buffer")
+	end
+	vim.cmd("only")
+end)

@@ -10,8 +10,9 @@
 ---
 --- `ctx` fields: `state` (session table), `is_active`, `render`, `close`,
 --- `choose`, `reload`, `refresh`, `move`, `page`, `current`, `set_query`,
---- `start_prompt`, `set_source`, `run_action`, `mouse_select`, `yank`,
---- `go_parent`, `go_root`, `toggle_mark`, `quickfix`, `open_external`.
+--- `start_prompt`, `start_delete`, `set_source`, `run_action`, `mouse_select`,
+--- `yank`, `go_parent`, `go_root`, `toggle_mark`, `quickfix`,
+--- `open_external`.
 
 local tf = require("loupe.util.textfield")
 local config = require("loupe.config")
@@ -76,7 +77,7 @@ local function handle_menu(ctx, map, key)
 	if action == "rename" then
 		ctx.start_prompt("Rename: ", item.cand.rel, "rename")
 	elseif action == "delete" then
-		ctx.start_prompt("Delete " .. item.cand.rel .. "? [y/N] ", "", "delete")
+		ctx.start_delete()
 	elseif action == "create" then
 		ctx.start_prompt("Add (end with / for a dir): ", "", "create")
 	elseif action == "duplicate" then

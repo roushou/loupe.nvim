@@ -40,3 +40,10 @@ h.test("title shows the full path when browsing above the project root", functio
 	local parts = drawer.title(session({ root = "/" }))
 	h.eq(parts[4], "/")
 end)
+
+h.test("action_label renames delete where a source closes buffers", function()
+	local buffers = require("loupe.source").get("buffers")
+	h.eq(drawer.action_label({ source = buffers }, "delete"), "close")
+	h.eq(drawer.action_label({ source = buffers }, "rename"), "rename")
+	h.eq(drawer.action_label(session(), "delete"), "delete")
+end)

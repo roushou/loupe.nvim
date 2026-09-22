@@ -102,3 +102,13 @@ h.test("search reports failure when no backend is available", function()
 	end)
 	h.eq(got, { {}, false })
 end)
+
+h.test("only the buffers source reinterprets delete", function()
+	for name, src in pairs(source.registry) do
+		if name == "buffers" then
+			h.eq(src.delete, "buffer")
+		else
+			h.eq(src.delete, nil, name .. " unexpectedly overrides delete")
+		end
+	end
+end)

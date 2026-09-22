@@ -235,6 +235,10 @@ local function run_action(name, value)
 		if value:lower() == "y" and action.delete(ctx) then
 			refresh()
 		end
+	elseif name == "close_buffer" then
+		if value:lower() == "y" and action.close_buffer(ctx, true) then
+			refresh()
+		end
 	elseif name == "create" then
 		local rel = action.create(ctx, value)
 		if rel then
@@ -322,6 +326,32 @@ function reload()
 				render()
 			end
 		end)
+	end
+end
+
+--- Begin the delete action for the current entry.
+---
+--- What `delete` means is the source's to say: a source with
+--- `delete = "buffer"` (see `loupe.source.buffers`) closes the buffer, which
+--- loses nothing and so needs no confirmation unless the buffer is modified.
+--- Everything else removes the file and always asks first.
+local function start_delete()
+	local item = current()
+	if not item then
+		return
+	end
+	local rel = item.cand.rel
+	if S.source.delete ~= "buffer" then
+		start_prompt("Delete " .. rel .. "? [y/N] ", "", "delete")
+		return
+	end
+	local buf = item.cand.bufnr
+	if buf and vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].modified then
+		start_prompt("Close " .. rel .. " with unsaved changes? [y/N] ", "", "close_buffer")
+		return
+	end
+	if action.close_buffer({ session = S, item = item, root = S.root }) then
+		refresh()
 	end
 end
 
@@ -586,6 +616,7 @@ function M.open(opts)
 		start_prompt = start_prompt,
 		set_source = set_source,
 		run_action = run_action,
+		start_delete = start_delete,
 		mouse_select = mouse_select,
 		go_parent = go_parent,
 		go_root = go_root,

@@ -1,4 +1,4 @@
---- File operations on the highlighted entry.
+--- File and buffer operations on the highlighted entry.
 ---
 --- Every operation is rooted at `ctx.root`; `ctx.item` is the current match's
 --- candidate. Functions return the relative path to focus afterwards (or true
@@ -85,6 +85,62 @@ function M.delete(ctx)
 	end
 	drop(ctx, cand)
 	notify("deleted " .. cand.rel)
+	return true
+end
+
+--- Most recently used listed buffer other than `buf`.
+local function alternate(buf)
+	local best
+	for _, info in ipairs(vim.fn.getbufinfo({ buflisted = 1 })) do
+		if info.bufnr ~= buf and (not best or info.lastused > best.lastused) then
+			best = info
+		end
+	end
+	return best and best.bufnr
+end
+
+--- Show another buffer in every window displaying `buf`. Deleting a buffer
+--- that is on screen would otherwise close its window, which tears down the
+--- layout the picker was opened over (and can leave the drawer as the last
+--- window standing).
+local function evict(buf)
+	local wins = {}
+	for _, win in ipairs(vim.api.nvim_list_wins()) do
+		if vim.api.nvim_win_get_buf(win) == buf then
+			wins[#wins + 1] = win
+		end
+	end
+	if #wins == 0 then
+		return
+	end
+	local alt = alternate(buf) or vim.api.nvim_create_buf(true, false)
+	for _, win in ipairs(wins) do
+		pcall(vim.api.nvim_win_set_buf, win, alt)
+	end
+end
+
+--- Close the current entry's buffer, leaving the file on disk alone. `force`
+--- discards unsaved changes; without it a modified buffer is refused.
+--- Returns true when the buffer is gone.
+function M.close_buffer(ctx, force)
+	local cand = ctx.item.cand
+	local buf = cand.bufnr
+	if not (buf and vim.api.nvim_buf_is_valid(buf)) then
+		drop(ctx, cand)
+		return true
+	end
+	if force ~= true and vim.bo[buf].modified then
+		notify("unsaved changes in " .. cand.rel, vim.log.levels.WARN)
+		return false
+	end
+	evict(buf)
+	local ok, err = pcall(vim.api.nvim_buf_delete, buf, { force = force == true })
+	if not ok then
+		notify("close failed: " .. tostring(err), vim.log.levels.ERROR)
+		return false
+	end
+	drop(ctx, cand)
+	notify("closed " .. cand.rel)
 	return true
 end
 
