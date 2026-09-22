@@ -45,7 +45,32 @@ h.test("tabs keep the active source visible when the strip does not fit", functi
 end)
 
 h.test("tabs append right-hand text", function()
-	h.ok(drawer.tabs(source.order, "files", 200, "src/x/"):find("%%=%%#LoupeTab#src/x/ "))
+	h.ok(drawer.tabs(source.order, "files", 200, { right = "src/x/" }):find("%%=src/x/ "), "root missing")
+end)
+
+h.test("tabs show the key that opens the source menu", function()
+	h.ok(drawer.tabs(source.order, "files", 200, { hint = "ctrl+o" }):find(" ctrl+o ", 1, true))
+end)
+
+h.test("tabs light up and show every key while selecting", function()
+	local keys = { files = "f", buffers = "b", doc_symbols = "t" }
+	local bar = drawer.tabs(source.order, "files", 400, { select = true, keys = keys })
+	h.ok(bar:find("LoupeTabSelectActive", 1, true), "active tab not marked")
+	h.ok(bar:find("[B]uffers", 1, true), "mnemonic missing: " .. bar)
+	h.ok(bar:find("[t] Doc", 1, true), "fallback mnemonic missing: " .. bar)
+	h.ok(bar:find("%%#LoupeTabSelect#%%="), "strip is not lit to the full width")
+	h.ok(
+		not drawer.tabs(source.order, "files", 400, { keys = keys }):find("[B]uffers", 1, true),
+		"keys shown outside select mode"
+	)
+end)
+
+h.test("mnemonic brackets the key in place, or prefixes it", function()
+	h.eq(drawer.mnemonic("Buffers", "b"), "[B]uffers")
+	h.eq(drawer.mnemonic("Files", "f"), "[F]iles")
+	h.eq(drawer.mnemonic("Doc", "t"), "[t] Doc")
+	h.eq(drawer.mnemonic("Diags", "e"), "[e] Diags")
+	h.eq(drawer.mnemonic("Files", nil), "Files")
 end)
 
 h.test("friendly_key spells keys the way people say them", function()
@@ -55,35 +80,31 @@ h.test("friendly_key spells keys the way people say them", function()
 	h.eq(drawer.friendly_key("r"), "r")
 end)
 
-h.test("hints advertise the browse keys, then the open submenu", function()
+h.test("action entries are offered in a canonical order", function()
 	local cfg = require("loupe.config").get()
-	local browse = drawer.hints(session(), cfg)
-	h.eq(browse[1], { "<CR>", "open" })
-	local labels = vim.tbl_map(function(hint)
-		return hint[2]
-	end, browse)
-	h.eq(labels, { "open", "actions", "sources", "mark" })
-
-	local menu = drawer.hints(session({ menu = "actions" }), cfg)
-	h.ok(#menu > 4, "action menu not listed")
-	h.eq(menu[1], { "r", "rename" }, "actions are not in their canonical order")
-	h.eq(menu[2], { "d", "delete" })
-
-	local sources = drawer.hints(session({ menu = "sources" }), cfg)
-	h.eq(sources[1], { "f", "Files" }, "sources do not follow the tab order")
-	h.eq(sources[2], { "d", "Dirs" })
+	local entries = drawer.action_entries(session(), cfg)
+	h.eq(entries[1], { "r", "rename" }, "actions are not in their canonical order")
+	h.eq(entries[2], { "d", "delete" })
+	h.ok(#entries > 4, "action menu not listed")
 end)
 
-h.test("hints name delete as close where the source closes buffers", function()
-	local cfg = require("loupe.config").get()
-	local menu = drawer.hints(session({ source = source.get("buffers"), menu = "actions" }), cfg)
+h.test("action entries name delete as close where the source closes buffers", function()
+	local entries = drawer.action_entries(session({ source = source.get("buffers") }), require("loupe.config").get())
 	local found
-	for _, hint in ipairs(menu) do
-		if hint[2] == "close" then
-			found = hint[1]
+	for _, entry in ipairs(entries) do
+		if entry[2] == "close" then
+			found = entry[1]
 		end
 	end
 	h.eq(found, "d")
+end)
+
+h.test("the action menu is a lit strip of bracketed keys", function()
+	local bar = drawer.menu({ { "r", "rename" }, { "a", "create" } }, 200, "esc cancel")
+	h.ok(bar:find("[r]ename", 1, true), "key not bracketed in place: " .. bar)
+	h.ok(bar:find("[a] create", 1, true), "key not prefixed: " .. bar)
+	h.ok(bar:find("LoupeTabSelect", 1, true), "menu strip is not lit")
+	h.ok(bar:find("esc cancel", 1, true), "no way out advertised")
 end)
 
 h.test("action_label renames delete where a source closes buffers", function()
@@ -103,8 +124,10 @@ local function render(over)
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	local marks =
 		vim.api.nvim_buf_get_extmarks(buf, vim.api.nvim_create_namespace("loupe_matches"), 0, -1, { details = true })
+	-- how many lines the window can actually show, window bar deducted
+	local visible = vim.fn.line("w$", win)
 	vim.api.nvim_win_close(win, true)
-	return lines, marks, s
+	return lines, marks, s, visible
 end
 
 local function cands(n)
@@ -115,18 +138,26 @@ local function cands(n)
 	return out
 end
 
-h.test("render fills exactly the window height", function()
-	local lines = render({ matches = cands(3), candidates = {} })
-	h.eq(#lines, 8, "expected one line per window row")
-	h.ok(lines[1]:find("…") == nil)
+h.test("render draws every line where it can be seen", function()
+	local lines, _, _, visible = render({ matches = cands(3), candidates = {} })
+	-- the window bar costs a text row: draw one line too many and the hint bar
+	-- lands below the fold, where it may as well not exist
+	h.eq(#lines, visible, "the last line is drawn outside the visible area")
 	h.ok(lines[2]:find("file01.lua", 1, true), "first match missing: " .. lines[2])
-	h.ok(lines[8]:find("enter open", 1, true), "hint bar missing: " .. lines[8])
+	h.ok(lines[4]:find("file03.lua", 1, true), "last match missing: " .. lines[4])
+	h.eq(lines[#lines], "", "short lists should pad with blank rows")
+
+	-- a full list fills every row, the last one included
+	local full, _, _, rows = render({ matches = cands(50), candidates = {} })
+	h.eq(#full, rows)
+	h.ok(full[#full]:find("file", 1, true), "last visible row is not a match: " .. full[#full])
 end)
 
 h.test("render scrolls the viewport to keep the selection visible", function()
-	local lines, _, s = render({ matches = cands(50), candidates = {}, index = 40 })
-	h.eq(s.top, 35, "viewport did not follow the selection")
-	h.ok(lines[7]:find("file40.lua", 1, true), "selected row not in view: " .. lines[7])
+	local lines, _, s, visible = render({ matches = cands(50), candidates = {}, index = 40 })
+	local rows = visible - 1
+	h.eq(s.top, 40 - rows + 1, "viewport did not follow the selection")
+	h.ok(lines[visible]:find("file40.lua", 1, true), "selected row not in view: " .. lines[visible])
 end)
 
 h.test("render paints a selection band on the selected row", function()
@@ -178,4 +209,28 @@ h.test("render dims the parent directory of a path row", function()
 	h.ok(dim, "no dimmed directory")
 	local line = render({ matches = { item }, candidates = {} })[2]
 	h.eq(line:sub(dim[1] + 1, dim[2]), "dir/")
+end)
+
+h.test("mnemonic never brackets a shifted key as its lowercase twin", function()
+	h.eq(drawer.mnemonic("yank rel", "Y"), "[Y] yank rel")
+	h.eq(drawer.mnemonic("yank path", "y"), "[y]ank path")
+end)
+
+h.test("action labels read as words, not identifiers", function()
+	local cfg = require("loupe.config").get()
+	local labels = {}
+	for _, entry in ipairs(drawer.action_entries(session(), cfg)) do
+		labels[entry[1]] = entry[2]
+	end
+	h.eq(labels["o"], "open ext")
+	h.eq(labels["Y"], "yank rel")
+	h.eq(labels["r"], "rename")
+end)
+
+h.test("an inline prompt says how to confirm and cancel", function()
+	local s = session({ prompt = { label = "Rename: ", value = "a.lua", caret = 5 } })
+	local bar = drawer.menu({ { "<CR>", "confirm" }, { "<Esc>", "cancel" } }, 200, "")
+	h.ok(bar:find("[enter] confirm", 1, true), "confirm missing: " .. bar)
+	h.ok(bar:find("[esc] cancel", 1, true), "cancel missing: " .. bar)
+	h.ok(s.prompt, "prompt state kept")
 end)

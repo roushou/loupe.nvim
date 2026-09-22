@@ -82,11 +82,21 @@ new keystroke stops the running search before starting the next.
 `files` and `dirs` are cached per root: reopening the picker shows the last
 list immediately while a fresh enumeration replaces it in the background.
 
-The drawer is laid out as a fixed viewport: the prompt on the first row, one
-match per row after it, and a hint bar on the last row listing what the next
-keypress does. The window bar holds the source tabs (the active one
-highlighted) and, when browsing away from the project root, that root on the
-right (`<BS>` on an empty query goes up, `<C-r>` returns).
+The drawer is laid out as a fixed viewport: the prompt on the first row and
+one match per row after it. The window bar is the only chrome: it holds the
+source tabs (the active one highlighted) prefixed by the key that switches
+them, and on the right either the current root, when browsing away from the
+project root (`<BS>` on an empty query goes up, `<C-r>` returns), or the key
+that opens the action menu.
+
+Both menus take over that strip rather than opening anything: `<C-o>` lights
+it up and marks each tab with its own key, `<C-x>` replaces the tabs with the
+actions, and an inline prompt shows how to confirm or cancel. A key is
+bracketed in place where it is the label's first letter (`[B]uffers`,
+`[r]ename`) and prefixed where it is not (`[t] Doc`, `[Y] yank rel` — a
+shifted key always shows as itself). Any other key cancels, which the strip
+says while it is lit. Rebinding `mappings.sources` or `mappings.menu` changes
+the keys shown.
 
 The prompt shows the source glyph, the source name while the query is empty,
 and the count on the right: `shown/total` for list sources, `found` for live
@@ -101,7 +111,7 @@ full set.
 
 >lua
     require("loupe").setup({
-      height = function() return math.max(8, math.floor(vim.o.lines * 0.33)) end,
+      height = function() return math.max(10, math.floor(vim.o.lines * 0.33)) end,
       max_results = 200,
       default_source = "files",
       root = function() ... end,
@@ -176,12 +186,12 @@ so a colourscheme applies without configuration. Override any of them:
   LoupeMetaFlag       DiagnosticWarn      the modified-buffer marker
   LoupeTab            Comment             an inactive source tab
   LoupeTabActive      Title               the active source tab
+  LoupeTabSelect      Visual              the strip while choosing a source
+  LoupeTabSelectActive PmenuSel           the current source while choosing
   LoupePrompt         Title               the prompt prefix
   LoupePromptCaret    LoupePrompt         the caret
   LoupeGhost          Comment             the source name on an empty query
   LoupeCount          LineNr              the result count
-  LoupeKey            Special             a key in the hint bar
-  LoupeHint           Comment             its label
   LoupeEmpty          Comment             the "no matches" line
   LoupeMark           DiagnosticInfo      the <Tab> mark
   LoupeBorder         FloatBorder         the window bar

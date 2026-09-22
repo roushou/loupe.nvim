@@ -518,8 +518,7 @@ local function choose(kind)
 end
 
 --- Select the match under the mouse (if the click was in the drawer). Row 1
---- is the prompt and the last row is the hint bar; the rows between show the
---- viewport starting at `S.top`.
+--- is the prompt; the rows below it show the viewport starting at `S.top`.
 local function mouse_select()
 	local mp = vim.fn.getmousepos()
 	if mp.winid ~= S.drawer_win or mp.line < 2 then
