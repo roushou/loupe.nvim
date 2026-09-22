@@ -1,4 +1,4 @@
---- rg backend: fallback file enumerator (and the future grep source).
+--- rg backend: fallback file enumerator and the primary live grep.
 ---
 --- `rg --files` respects `.gitignore` and skips hidden/binary files just like
 --- fd, so it is a safe substitute when fd is unavailable.
@@ -19,14 +19,16 @@ M.list = {
 M.search = {
 	--- Live content search. JSON output gives the full line plus exact byte
 	--- ranges for each submatch, so the preview can highlight the occurrence.
+	--- Results stream in as rg finds them and the process is stopped once
+	--- `ctx.limit` candidates exist. Returns a cancel function.
 	grep = function(query, ctx, cb)
 		if query == "" then
-			cb({}, true)
+			cb({}, true, true)
 			return
 		end
-		run.raw({ "rg", "--json", "--smart-case", "--max-count", "30", "--", query }, ctx.root, function(stdout)
-			return parse.rgjson(stdout, ctx.root)
-		end, cb)
+		return run.stream({ "rg", "--json", "--smart-case", "--", query }, ctx.root, function(lines)
+			return parse.rgjson_lines(lines, ctx.root)
+		end, cb, ctx.limit)
 	end,
 }
 

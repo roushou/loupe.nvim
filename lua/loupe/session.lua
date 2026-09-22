@@ -66,12 +66,24 @@ local function wrap(cands)
 	return out
 end
 
+--- Stop the in-flight dynamic search, if any.
+local function cancel_search()
+	if S.search_cancel then
+		S.search_cancel()
+		S.search_cancel = nil
+	end
+	S.searching = false
+end
+
 --- Recompute matches for the current query. Static sources are ranked locally;
 --- dynamic sources (grep/symbols) re-query the backend, debounced unless
---- `immediate` is set.
+--- `immediate` is set. A search still streaming for the previous query is
+--- stopped at once so its results never paint over the new query.
 local function refresh(immediate)
 	S.gen = S.gen + 1
 	if S.source.search then
+		cancel_search()
+		S.searching = true
 		if immediate then
 			S.search_timer:cancel()
 			run_search()
@@ -135,12 +147,26 @@ run_search = function()
 	end
 	local gen = session.gen
 	local root, src, query = session.root, session.source, session.query
-	source.search(src, query, { root = root, buf = session.origin_buf, name = src.name }, function(cands)
+	local limit = config.get().max_results
+	session.searching = true
+	session.truncated = false
+	local ctx = { root = root, buf = session.origin_buf, name = src.name, limit = limit }
+	-- Results may arrive in several batches (streaming backends): each one
+	-- replaces the list, keeping the selection where it is.
+	session.search_cancel = source.search(src, query, ctx, function(cands, _, meta)
 		if S ~= session or session.gen ~= gen or session.root ~= root or session.source ~= src then
 			return
 		end
+		if meta.truncated and #cands > limit then
+			cands = vim.list_slice(cands, 1, limit)
+		end
 		session.candidates = cands
 		session.loaded = true
+		session.searching = not meta.done
+		session.truncated = meta.truncated
+		if meta.done then
+			session.search_cancel = nil
+		end
 		session.matches = wrap(cands)
 		normalize_index()
 		render()
@@ -228,21 +254,29 @@ function reload()
 		return
 	end
 	local cfg = config.get()
-	S.loaded = false
-	S.matches = {}
-	S.index = 0
 	if S.search_timer then
 		S.search_timer:cancel()
 	end
-	drawer.render(S, cfg)
-	vim.cmd("redraw")
+	cancel_search()
+	S.truncated = false
 
 	local session = S
 	local root, src = S.root, S.source
 	if src.search then
+		S.loaded = false
+		S.matches = {}
+		S.index = 0
+		drawer.render(S, cfg)
+		vim.cmd("redraw")
 		refresh(true)
 		return
 	end
+
+	S.loaded = false
+	S.matches = {}
+	S.index = 0
+	drawer.render(S, cfg)
+	vim.cmd("redraw")
 
 	source.load(src, { root = root, buf = session.origin_buf, name = src.name }, function(cands)
 		if S ~= session or S.root ~= root or S.source ~= src then
@@ -335,6 +369,7 @@ function M.close(opts)
 	local guicursor = S.guicursor
 	local cursor = S.origin_cursor
 	S.active = false
+	cancel_search()
 	if S.search_timer then
 		S.search_timer:close()
 	end
@@ -471,6 +506,11 @@ function M.open(opts)
 		git = nil,
 		prompt = nil,
 		menu = nil,
+		-- dynamic sources: in-flight search handle, its progress and whether
+		-- it was stopped at `max_results`
+		search_cancel = nil,
+		searching = false,
+		truncated = false,
 		-- captured before the drawer exists, so window-local options are the
 		-- user's normal values (drawer turns number/signcolumn off)
 		preview_opts = {

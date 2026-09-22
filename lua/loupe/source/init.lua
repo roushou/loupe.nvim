@@ -1,10 +1,13 @@
 --- Source registry.
 ---
 --- A source is a named mode of the picker (`files`, `dirs`, `buffers`,
---- `recent`, `changed`, later `grep` / `symbols`). It knows how to produce
+--- `recent`, `changed`, `grep`, `symbols`, ...). It knows how to produce
 --- candidates, either through a backend `list` operation (string `list`) or a
 --- self-contained loader (`list` function). Matching, drawing, previewing and
 --- opening stay generic; only the candidate list is source-specific.
+---
+--- `cache = true` keeps the last enumeration across sessions (see
+--- `loupe.cache`) so reopening renders before the fresh list arrives.
 
 local backend = require("loupe.backend")
 
@@ -39,21 +42,28 @@ function M.load(source, ctx, cb)
 	end)
 end
 
---- Search `source` for `query` under `ctx` (dynamic sources).
---- Calls `cb(cands, ok, backend_id)`.
+--- Search `source` for `query` under `ctx` (dynamic sources). `ctx.limit`
+--- asks for at most that many candidates.
+---
+--- Calls `cb(cands, ok, meta)` with `meta = { backend, done, truncated }`. A
+--- streaming backend calls it several times with the growing list and
+--- `done = false`, then once more with `done = true`; `truncated` means the
+--- backend stopped at `ctx.limit`. Returns the backend's cancel function when
+--- it has one.
 function M.search(source, query, ctx, cb)
+	local id, fn
 	if type(source.search) == "function" then
-		source.search(query, ctx, cb)
-		return
+		id, fn = source.name, source.search
+	else
+		local op = source.search or source.name
+		id, fn = backend.resolve(op, source.backend, "search")
 	end
-	local op = source.search or source.name
-	local id, fn = backend.resolve(op, source.backend, "search")
 	if not fn then
-		cb({}, false, id)
+		cb({}, false, { backend = id, done = true, truncated = false })
 		return
 	end
-	fn(query, ctx, function(cands, ok)
-		cb(cands, ok, id)
+	return fn(query, ctx, function(cands, ok, done, truncated)
+		cb(cands, ok, { backend = id, done = done ~= false, truncated = truncated == true })
 	end)
 end
 

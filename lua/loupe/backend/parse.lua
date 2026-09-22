@@ -78,37 +78,65 @@ function M.status(stdout, root)
 	return out
 end
 
---- Parse `rg --json` (NDJSON) match events into candidates. Each submatch
+--- Longest match line shown in the list; rg ignores `--max-columns` under
+--- `--json`, so minified lines are windowed around the match here instead.
+local MAX_LABEL = 200
+
+--- `text` cut to `MAX_LABEL` bytes around byte offset `from` (0-based).
+local function window(text, from)
+	if #text <= MAX_LABEL then
+		return text
+	end
+	local start = math.max(1, from - math.floor(MAX_LABEL / 4))
+	local out = text:sub(start, start + MAX_LABEL - 1)
+	if start > 1 then
+		out = "…" .. out
+	end
+	if start + MAX_LABEL - 1 < #text then
+		out = out .. "…"
+	end
+	return out
+end
+
+--- Parse `rg --json` (NDJSON) match event lines into candidates. Each submatch
 --- becomes a candidate carrying the exact byte range (`col`..`col_end`) so the
 --- preview can highlight the occurrence. Handles text and base64 byte paths.
-function M.rgjson(stdout, root)
+function M.rgjson_lines(lines, root)
 	local out = {}
-	for _, line in ipairs(run.lines(stdout)) do
-		local ok, ev = pcall(vim.json.decode, line)
-		if ok and type(ev) == "table" and ev.type == "match" then
-			local d = ev.data or {}
-			local path = d.path and (d.path.text or (d.path.bytes and vim.base64.decode(d.path.bytes)))
-			local text = d.lines and (d.lines.text or (d.lines.bytes and vim.base64.decode(d.lines.bytes)))
-			if path and text then
-				text = text:gsub("\r?\n$", "")
-				local lnum = d.line_number or 1
-				for _, sm in ipairs(d.submatches or {}) do
-					local from = sm.start or 0
-					local to = sm["end"] or from
-					out[#out + 1] = {
-						rel = path,
-						abs = vim.fs.joinpath(root, path),
-						label = path .. ":" .. lnum .. ": " .. text,
-						lnum = lnum,
-						col = from,
-						col_end = to,
-						dir = false,
-					}
+	for _, line in ipairs(lines) do
+		-- only match events are decoded; begin/end/summary are skipped cheaply
+		if line:find('"type":"match"', 1, true) then
+			local ok, ev = pcall(vim.json.decode, line)
+			if ok and type(ev) == "table" and ev.type == "match" then
+				local d = ev.data or {}
+				local path = d.path and (d.path.text or (d.path.bytes and vim.base64.decode(d.path.bytes)))
+				local text = d.lines and (d.lines.text or (d.lines.bytes and vim.base64.decode(d.lines.bytes)))
+				if path and text then
+					text = text:gsub("\r?\n$", "")
+					local lnum = d.line_number or 1
+					for _, sm in ipairs(d.submatches or {}) do
+						local from = sm.start or 0
+						local to = sm["end"] or from
+						out[#out + 1] = {
+							rel = path,
+							abs = vim.fs.joinpath(root, path),
+							label = path .. ":" .. lnum .. ": " .. window(text, from),
+							lnum = lnum,
+							col = from,
+							col_end = to,
+							dir = false,
+						}
+					end
 				end
 			end
 		end
 	end
 	return out
+end
+
+--- `rgjson_lines` over a whole stdout buffer.
+function M.rgjson(stdout, root)
+	return M.rgjson_lines(run.lines(stdout), root)
 end
 
 --- Parse `git grep -n` output (`path:line:text`) into candidates (no column).

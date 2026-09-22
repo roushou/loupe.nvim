@@ -115,3 +115,23 @@ h.test("gitgrep parses path:line:text with column 0", function()
 		dir = false,
 	})
 end)
+
+h.test("rgjson windows long lines around the match", function()
+	local text = string.rep("a", 500) .. "needle" .. string.rep("b", 500)
+	local ev = vim.json.encode({
+		type = "match",
+		data = {
+			path = { text = "x.txt" },
+			lines = { text = text .. "\n" },
+			line_number = 7,
+			submatches = { { start = 500, ["end"] = 506, match = { text = "needle" } } },
+		},
+	})
+	local out = parse.rgjson_lines({ ev }, "/r")
+	h.eq(#out, 1)
+	h.eq(out[1].col, 500)
+	h.eq(out[1].col_end, 506)
+	h.eq(out[1].lnum, 7)
+	h.ok(#out[1].label < 260, "label not windowed: " .. #out[1].label)
+	h.ok(out[1].label:find("needle", 1, true), "match missing from label")
+end)

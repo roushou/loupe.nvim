@@ -74,6 +74,10 @@ Switch sources with the source menu (`<C-o>`).
 `grep` and `symbols` re-query on each keystroke (debounced); the preview jumps
 to the match. Choosing a symbol or diagnostic jumps to its location.
 
+`grep` streams: matches appear as `rg` finds them and the search is stopped
+once `max_results` have arrived (the title shows `N+`; `…` while running). A
+new keystroke stops the running search before starting the next.
+
 ==============================================================================
 5. CONFIGURATION                                         *loupe-configuration*
 
