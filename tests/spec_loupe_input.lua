@@ -1,0 +1,86 @@
+local h = require("tests.harness")
+local input = require("loupe.input")
+local session = require("loupe.session")
+
+-- The CTRL-C path cannot be asserted in-process, and not in `--headless`
+-- either: `nvim_input("\3")` injects a plain byte rather than the interrupt a
+-- terminal raises, so a test built on it passes whether or not the bug is
+-- fixed. It was verified by driving a real Neovim in a pty: with the reader
+-- below, CTRL-C closes the picker and the editor answers `:` again; with a
+-- bare `getcharstr()`, the editor answers nothing. What is left to protect
+-- here is that the reader keeps going through the wrapper.
+
+h.test("keys are read through the interrupt-safe wrapper", function()
+	h.eq(vim.fn.exists("*LoupeGetChar"), 1, "the wrapper is not defined")
+	local real = vim.fn.LoupeGetChar
+	local used = false
+	vim.fn.LoupeGetChar = function()
+		used = true
+		return "x"
+	end
+	local ch = input.read()
+	vim.fn.LoupeGetChar = real
+	h.ok(used, "read() bypassed the wrapper: a CTRL-C would abort the loop")
+	h.eq(ch, "x")
+end)
+
+h.test("the wrapper hands back CTRL-C as a character", function()
+	-- what the catch arm returns, spelled the way the mappings spell it
+	h.eq(vim.fn.keytrans(vim.keycode("<C-c>")), "<C-C>")
+end)
+
+h.test("the close mapping covers the key CTRL-C arrives as", function()
+	local maps = require("loupe.keymap").resolve(require("loupe.config").get().mappings)
+	h.eq(maps.browse[vim.fn.keytrans("\3")], "close")
+end)
+
+h.test("read reports the end of the input stream as an empty key", function()
+	local real = vim.fn.LoupeGetChar
+	vim.fn.LoupeGetChar = function()
+		error("stream gone")
+	end
+	h.eq(input.read(), "")
+	vim.fn.LoupeGetChar = real
+end)
+
+h.test("an error in the key loop still tears the picker down", function()
+	local real = vim.fn.LoupeGetChar
+	local guicursor = vim.o.guicursor
+	local windows = #vim.api.nvim_list_wins()
+	vim.fn.LoupeGetChar = function()
+		error("boom")
+	end
+	local notify = vim.notify
+	vim.notify = function() end
+
+	session.open()
+
+	vim.fn.LoupeGetChar = real
+	vim.notify = notify
+	h.eq(session.is_active(), false, "session left active")
+	h.eq(#vim.api.nvim_list_wins(), windows, "drawer or preview left open")
+	h.eq(vim.o.guicursor, guicursor, "the real cursor was left hidden")
+end)
+
+h.test("opening again recovers from a session whose drawer is gone", function()
+	local real = vim.fn.LoupeGetChar
+	local notify = vim.notify
+	vim.notify = function() end
+	vim.fn.LoupeGetChar = function()
+		error("boom")
+	end
+	session.open()
+	vim.fn.LoupeGetChar = real
+	vim.notify = notify
+
+	-- the picker must still open afterwards
+	local opened = false
+	vim.fn.LoupeGetChar = function()
+		opened = true
+		return vim.keycode("<Esc>")
+	end
+	session.open()
+	vim.fn.LoupeGetChar = real
+	h.ok(opened, "the picker refused to open after an aborted session")
+	h.eq(session.is_active(), false)
+end)

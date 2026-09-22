@@ -172,6 +172,10 @@ loupe.close()               Close.
 loupe.toggle({opts})        Toggle.
 loupe.is_active()           Whether the picker is open.
 
+`<C-c>` closes the picker like `<Esc>`. Keys are read from inside a `:try`
+block, without which Neovim's interrupt would abort the picker's key loop
+part-way and leave the drawer, the preview and the hidden cursor behind.
+
 ==============================================================================
 9. HIGHLIGHTS                                             *loupe-highlights*
 

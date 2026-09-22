@@ -14,6 +14,7 @@ for _, spec in ipairs({
 	"tests.spec_loupe_icons",
 	"tests.spec_loupe_keymap",
 	"tests.spec_loupe_action",
+	"tests.spec_loupe_input",
 	"tests.spec_loupe_stream",
 	"tests.spec_loupe_file",
 	"tests.spec_loupe_cache",

@@ -172,6 +172,33 @@ local function handle_browse(ctx, map, ch, key)
 	return false
 end
 
+-- Reading keys through Vimscript's `:try` is not a detour: outside one,
+-- CTRL-C during `getcharstr()` raises an interrupt that aborts the running
+-- Lua chunk outright — `pcall` does not catch it. The loop would stop mid-way
+-- with the drawer still open, the preview still covering the window and the
+-- real cursor still hidden, and nothing left running to clean any of it up.
+-- Inside a `:try`, the same keypress is delivered as the character it is, so
+-- it reaches the mappings like any other key.
+vim.api.nvim_exec2(
+	[[
+function! LoupeGetChar() abort
+  try
+    return getcharstr()
+  catch /^Vim:Interrupt$/
+    return "\<C-c>"
+  endtry
+endfunction
+]],
+	{}
+)
+
+--- Read one key, or "" when the input stream ended.
+function M.read()
+	local ok, ch = pcall(vim.fn.LoupeGetChar)
+	-- a failed read is the stream giving up; treat it as a close
+	return ok and ch or ""
+end
+
 --- Whether keys are waiting in the typeahead (a held or repeated key). The
 --- session skips redraws while this holds: only the last queued key needs to
 --- paint.
@@ -184,7 +211,7 @@ function M.run(ctx)
 	local maps = keymap.resolve(config.get().mappings)
 	ctx.render()
 	while ctx.is_active() do
-		local ch = vim.fn.getcharstr()
+		local ch = M.read()
 		if ch == "" then
 			ctx.close()
 			return

@@ -535,7 +535,12 @@ end
 --- Open the picker. `opts.source` picks the initial source by name.
 function M.open(opts)
 	if active() then
-		return
+		-- A session whose drawer is gone was torn down from under us; drop it
+		-- rather than refusing to open for the rest of the editor's life.
+		if S.drawer_win and vim.api.nvim_win_is_valid(S.drawer_win) then
+			return
+		end
+		M.close()
 	end
 	local cfg = config.get()
 	local origin = vim.api.nvim_get_current_win()
@@ -605,7 +610,10 @@ function M.open(opts)
 	})
 
 	reload()
-	input.run({
+	-- Whatever happens in the loop, the picker must not be left half-open: the
+	-- drawer and the preview cover the screen and the real cursor is hidden,
+	-- so an error escaping here would look like a frozen editor.
+	local ok, err = pcall(input.run, {
 		state = S,
 		is_active = active,
 		render = render,
@@ -633,6 +641,10 @@ function M.open(opts)
 			action.open_external({ session = S, item = item, root = S.root })
 		end,
 	})
+	if not ok then
+		M.close()
+		require("loupe.util.notify").scoped("loupe")(tostring(err), vim.log.levels.ERROR)
+	end
 end
 
 --- Toggle the picker.
