@@ -198,27 +198,44 @@ so a colourscheme applies without configuration. Override any of them:
   LoupeDir            Comment             a path's parent directory
   LoupeMeta           LineNr              the right-hand metadata column
   LoupeMetaFlag       DiagnosticWarn      the modified-buffer marker
-  LoupeTab            Comment             an inactive source tab
+  LoupeTab            computed            an inactive source tab
   LoupeTabActive      Title               the active source tab
   LoupeTabSelect      computed            the strip while a menu is open
   LoupeTabSelectActive computed           the active tab while a menu is open
   LoupeTabSelectKey   computed            the key to press
-
-The three computed groups take the normal colours with a background lifted
-away from `Normal`'s (darkened on a light theme), so a menu changes nothing
-but the tint. Themes with no background of their own fall back to
-`CursorLine`. Set any of them yourself to take over.
   LoupePrompt         Title               the prompt prefix
   LoupePromptCaret    LoupePrompt         the caret
   LoupeGhost          Comment             the source name on an empty query
   LoupeCount          LineNr              the result count
   LoupeEmpty          Comment             the "no matches" line
   LoupeMark           DiagnosticInfo      the <Tab> mark
-  LoupeBorder         FloatBorder         the window bar
+  LoupeBorder         StatusLine          the window bar
   LoupeGitAdd         DiagnosticOk        git: added
   LoupeGitMod         DiagnosticWarn      git: modified
   LoupeGitDel         DiagnosticError     git: deleted or conflicted
   LoupeGitNew         DiagnosticHint      git: untracked
   LoupeGitRename      DiagnosticInfo      git: renamed or copied
+
+The computed groups are measured against the surface each one is drawn on.
+A mute goes against `LoupeBorder`, the window bar itself; a lift goes against
+`Normal`, the list the bar borders. Measured against the wrong ground, a
+colour either fades into its own background or lands on its neighbour's.
+
+`LoupeTab` is `LoupeBorder`'s foreground muted 30% towards its background,
+so an inactive tab recedes while staying legible — `Comment` is built to sit
+at the edge of legibility, which is right for a hint and wrong for a label
+meant to be read.
+
+The three select groups light the strip up. Their background is `Normal`'s
+lifted by 6% (darkened on a light theme), far enough that an open menu reads
+as its own surface rather than as more list; their text comes up to
+`LoupeBorder`'s full foreground, because a menu makes every entry on the
+strip a live choice and nothing on it should still be receding. The key to
+press is marked by weight and by sitting at `Normal`'s own brightness, so
+the strip gains no colour the closed one did not have.
+
+Themes with no foreground or background of their own on the bar, or none on
+`Normal`, fall back to `Comment` and `CursorLine`. Set any group yourself to
+take over.
 
 vim:tw=78:ts=8:ft=help:norl:

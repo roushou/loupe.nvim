@@ -121,8 +121,9 @@ vim.api.nvim_set_hl(0, "LoupeSelection", { link = "CursorLine" })
 | `LoupeDir` | `Comment` | the parent directory of a path |
 | `LoupeMeta` | `LineNr` | the right-hand metadata column |
 | `LoupeMetaFlag` | `DiagnosticWarn` | the modified-buffer marker |
-| `LoupeTab` / `LoupeTabActive` | `Comment` / `Title` | source tabs |
+| `LoupeTab` / `LoupeTabActive` | computed / `Title` | source tabs |
 | `LoupeTabSelect` / `LoupeTabSelectActive` / `LoupeTabSelectKey` | computed from `Normal` | the strip while a menu is open, and the key to press |
+| `LoupeBorder` | `StatusLine` | the window bar, and the text every unstyled part of it inherits |
 | `LoupePrompt` / `LoupePromptCaret` | `Title` | prompt prefix and caret |
 | `LoupeGhost` | `Comment` | the source name on an empty query |
 | `LoupeCount` | `LineNr` | the result count |

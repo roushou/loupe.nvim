@@ -33,7 +33,6 @@ local function resolve(group)
 	local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = group, link = false })
 	return ok and hl or {}
 end
-
 --- `rgb` moved `amount` towards white when it is dark, towards black when it
 --- is light: the same nudge reads as "lifted" in either kind of theme.
 local function shade(rgb, amount)
@@ -45,30 +44,70 @@ local function shade(rgb, amount)
 	return mix(r) * 65536 + mix(g) * 256 + mix(b)
 end
 
+--- `fg` moved `amount` of the way towards `bg`: the same colour, further
+--- back. Unlike picking a grey, this keeps whatever tint the theme's chrome
+--- text has, so a muted label still belongs to the bar it sits on.
+local function mute(fg, bg, amount)
+	local function channel(shift)
+		local from, to = math.floor(fg / shift) % 256, math.floor(bg / shift) % 256
+		return math.floor(from + (to - from) * amount + 0.5) * shift
+	end
+	return channel(65536) + channel(256) + channel(1)
+end
+
+--- The bar's own colours: the ground it is drawn on, the text it lends to
+--- anything that sets no colour of its own, that text muted for the parts
+--- meant to recede, and the ground of the list the bar sits against.
+---
+--- A mute is measured against the bar, because that is what the muted text
+--- is drawn on. A lift is measured against `list`, because what a lit strip
+--- has to separate itself from is the row beneath it. Returns nil for a
+--- theme that leaves any of them unset, which the callers read as "fall back
+--- to a link and let the theme decide".
+local function chrome()
+	local bar = resolve("LoupeBorder")
+	local list = resolve("Normal").bg
+	if not (bar.fg and bar.bg and list) then
+		return nil
+	end
+	return { fg = bar.fg, bg = bar.bg, dim = mute(bar.fg, bar.bg, 0.3), list = list }
+end
+
 --- Highlights for the strip while a menu is open.
 ---
---- The strip keeps the colours it already had — only its background shifts, a
---- nudge away from the normal one, so the eye has nothing to re-find. The key
---- to press is marked by weight rather than by another colour, for the same
---- reason. Themes without a background of their own fall back to CursorLine,
---- which is the same idea already solved by the theme.
-local function select_highlights()
-	local base = resolve("Normal").bg
-	if not base then
+--- The strip lights up. Its ground lifts away from the list it borders,
+--- far enough to read as its own surface: lift it against the buffer above
+--- the drawer instead and it lands on the list's own colour, where the bar
+--- stops being a bar at all. Its text comes up to full chrome strength,
+--- because a menu makes every entry on the strip a live choice and nothing
+--- on it should be receding any more. The key to press is marked by weight
+--- and by sitting at `Normal`'s own brightness, rather than by a colour of
+--- its own, so the strip gains no hue the closed one did not have.
+---
+--- Themes without a background of their own fall back to CursorLine, which
+--- is the same idea already solved by the theme.
+local function select_highlights(bar)
+	if not bar then
 		vim.api.nvim_set_hl(0, "LoupeTabSelect", { link = "CursorLine", default = true })
 		vim.api.nvim_set_hl(0, "LoupeTabSelectActive", { link = "CursorLine", default = true })
 		vim.api.nvim_set_hl(0, "LoupeTabSelectKey", { bold = true, underline = true, default = true })
 		return
 	end
-	local bg = shade(base, 0.1)
-	vim.api.nvim_set_hl(0, "LoupeTabSelect", { fg = resolve("Comment").fg, bg = bg, default = true })
+	local bg = shade(bar.list, 0.06)
+	vim.api.nvim_set_hl(0, "LoupeTabSelect", { fg = bar.fg, bg = bg, default = true })
 	vim.api.nvim_set_hl(0, "LoupeTabSelectActive", {
 		fg = resolve("Title").fg,
 		bg = bg,
 		bold = true,
 		default = true,
 	})
-	vim.api.nvim_set_hl(0, "LoupeTabSelectKey", { bg = bg, bold = true, underline = true, default = true })
+	vim.api.nvim_set_hl(0, "LoupeTabSelectKey", {
+		fg = resolve("Normal").fg or bar.fg,
+		bg = bg,
+		bold = true,
+		underline = true,
+		default = true,
+	})
 end
 
 local function define_highlights()
@@ -77,7 +116,12 @@ local function define_highlights()
 	vim.api.nvim_set_hl(0, "LoupePrompt", { link = "Title", default = true })
 	vim.api.nvim_set_hl(0, "LoupePromptCaret", { link = "LoupePrompt", default = true })
 	vim.api.nvim_set_hl(0, "LoupeCursor", { blend = 100, nocombine = true })
-	vim.api.nvim_set_hl(0, "LoupeBorder", { link = "FloatBorder", default = true })
+	-- StatusLine, not FloatBorder: the drawer is a real split, and a theme
+	-- tunes StatusLine for exactly this — a strip of chrome across one. A
+	-- border's foreground is picked to be nearly invisible because it only
+	-- ever draws box corners, and every chunk of the bar that sets no colour
+	-- of its own inherits this group's.
+	vim.api.nvim_set_hl(0, "LoupeBorder", { link = "StatusLine", default = true })
 	vim.api.nvim_set_hl(0, "LoupeGitMod", { link = "DiagnosticWarn", default = true })
 	vim.api.nvim_set_hl(0, "LoupeGitAdd", { link = "DiagnosticOk", default = true })
 	vim.api.nvim_set_hl(0, "LoupeGitDel", { link = "DiagnosticError", default = true })
@@ -90,10 +134,15 @@ local function define_highlights()
 	vim.api.nvim_set_hl(0, "LoupeMetaFlag", { link = "DiagnosticWarn", default = true })
 	vim.api.nvim_set_hl(0, "LoupeGhost", { link = "Comment", default = true })
 	vim.api.nvim_set_hl(0, "LoupeCount", { link = "LineNr", default = true })
-	vim.api.nvim_set_hl(0, "LoupeTab", { link = "Comment", default = true })
+	local bar = chrome()
+	-- an inactive tab recedes by being muted chrome text, not by borrowing
+	-- Comment: Comment is built to sit at the edge of legibility so the eye
+	-- skips it, which is right for a hint and wrong for a label to read
+	local tab = bar and { fg = bar.dim, default = true } or { link = "Comment", default = true }
+	vim.api.nvim_set_hl(0, "LoupeTab", tab)
 	vim.api.nvim_set_hl(0, "LoupeTabActive", { link = "Title", default = true })
 	vim.api.nvim_set_hl(0, "LoupeEmpty", { link = "Comment", default = true })
-	select_highlights()
+	select_highlights(bar)
 end
 
 --- Open the split at `height` lines and return { win, buf }.

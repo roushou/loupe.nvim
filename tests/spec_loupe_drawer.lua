@@ -280,3 +280,90 @@ h.test("a location row highlights only what is on the left", function()
 	end
 	h.eq(n, 1, "a position past the left column was highlighted anyway")
 end)
+
+-- The window bar is the picker's only chrome, and it borders the list rather
+-- than the buffer further up. Both of its states have to stay legible and
+-- stay distinguishable from that list, or the bar reads as part of it.
+--
+-- Driven through a palette of known colours rather than whatever theme is
+-- loaded: what is under test is the arithmetic, not somebody's colourscheme.
+
+local CHROME = {
+	Normal = { fg = 0xdcd7ba, bg = 0x1f1f28 },
+	StatusLine = { fg = 0xc8c093, bg = 0x16161d },
+	Title = { fg = 0x7e9cd8, bold = true },
+	Comment = { fg = 0x727169 },
+}
+
+--- Open the drawer with `CHROME` in place, so the bar groups are recomputed
+--- from colours the assertions below can be written against.
+local function open_with_palette()
+	for name, attrs in pairs(CHROME) do
+		vim.api.nvim_set_hl(0, name, attrs)
+	end
+	for _, group in ipairs({
+		"LoupeBorder",
+		"LoupeTab",
+		"LoupeTabActive",
+		"LoupeTabSelect",
+		"LoupeTabSelectActive",
+		"LoupeTabSelectKey",
+	}) do
+		vim.cmd("highlight clear " .. group)
+	end
+	drawer.open(10)
+end
+
+--- Relative luminance of a highlight group's resolved `key` colour.
+local function luminance(group, key)
+	local rgb = vim.api.nvim_get_hl(0, { name = group, link = false })[key]
+	h.ok(rgb, group .. " has no " .. key)
+	local function channel(shift)
+		local c = (math.floor(rgb / shift) % 256) / 255
+		return c <= 0.04045 and c / 12.92 or ((c + 0.055) / 1.055) ^ 2.4
+	end
+	return 0.2126 * channel(65536) + 0.7152 * channel(256) + 0.0722 * channel(1)
+end
+
+local function ratio(a, b)
+	if a < b then
+		a, b = b, a
+	end
+	return (a + 0.05) / (b + 0.05)
+end
+
+h.test("every label on the window bar clears the contrast floor", function()
+	open_with_palette()
+	for _, case in ipairs({
+		-- { group, the ground it is drawn on }
+		{ "LoupeTab", "LoupeBorder" },
+		{ "LoupeTabActive", "LoupeBorder" },
+		{ "LoupeTabSelect", "LoupeTabSelect" },
+		{ "LoupeTabSelectActive", "LoupeTabSelectActive" },
+		{ "LoupeTabSelectKey", "LoupeTabSelectKey" },
+	}) do
+		local r = ratio(luminance(case[1], "fg"), luminance(case[2], "bg"))
+		h.ok(r >= 4.5, ("%s reads at %.2f:1 on %s, below 4.5:1"):format(case[1], r, case[2]))
+	end
+end)
+
+h.test("the lit strip is a different surface from the list below it", function()
+	open_with_palette()
+	-- plain luminance, not the WCAG ratio: that formula's +0.05 term is there
+	-- to model text on a ground, and it flattens two dark surfaces to within
+	-- a hair of each other however far apart they actually are
+	local lit, list = luminance("LoupeTabSelect", "bg"), luminance("Normal", "bg")
+	local r = math.max(lit, list) / math.min(lit, list)
+	-- 1.5 is well under what a lift aims for; it catches the strip landing on
+	-- the list's own colour, which is what happens when the lift is measured
+	-- against the buffer above the drawer instead
+	h.ok(r >= 1.5, ("an open menu is indistinguishable from the list (%.2fx)"):format(r))
+end)
+
+h.test("the resting bar sits below the list rather than on it", function()
+	open_with_palette()
+	h.ok(
+		luminance("LoupeBorder", "bg") < luminance("Normal", "bg"),
+		"the window bar is not recessed from the list it borders"
+	)
+end)
