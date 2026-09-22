@@ -60,7 +60,8 @@ Loupe deliberately does not create any global keymaps. Suggested:
 ==============================================================================
 4. SOURCES                                                   *loupe-sources*
 
-Switch sources with the source menu (`<C-o>`).
+Switch sources with the source menu (`<C-o>`), or step along the tab strip
+with `<C-Right>` and `<C-Left>`, which wrap at both ends.
 
   f  files          `fd` -> `rg` -> `git`      project files
   d  dirs           `fd`                        directories; <CR> descends
@@ -74,6 +75,12 @@ Switch sources with the source menu (`<C-o>`).
 
 `grep` and `symbols` re-query on each keystroke (debounced); the preview jumps
 to the match. Choosing a symbol or diagnostic jumps to its location.
+
+A source that finds places rather than files draws them in two columns: what
+was found on the left — the matched line, the symbol, the message — and where
+it is on the right (`path:line`, or the symbol's kind for `doc_symbols`). A
+grep hit is highlighted inside its line, as it is in the preview. Both
+columns are searchable, but only the left one is highlighted as you type.
 
 `grep` streams: matches appear as `rg` finds them and the search is stopped
 once `max_results` have arrived (the title shows `N+`; `…` while running). A

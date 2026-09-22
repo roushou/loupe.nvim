@@ -73,7 +73,11 @@ h.test("rgjson parses match events with submatch ranges", function()
 	h.eq(out[1], {
 		rel = "lua/a.lua",
 		abs = "/r/lua/a.lua",
-		label = "lua/a.lua:12: local M = {}",
+		text = "local M = {}",
+		meta = "lua/a.lua:12",
+		label = "local M = {}  lua/a.lua:12",
+		text_col = 6,
+		text_col_end = 7,
 		lnum = 12,
 		col = 6,
 		col_end = 7,
@@ -109,7 +113,9 @@ h.test("gitgrep parses path:line:text with column 0", function()
 	h.eq(out[1], {
 		rel = "lua/a.lua",
 		abs = "/r/lua/a.lua",
-		label = "lua/a.lua:12: local M = {}",
+		text = "local M = {}",
+		meta = "lua/a.lua:12",
+		label = "local M = {}  lua/a.lua:12",
 		lnum = 12,
 		col = 0,
 		dir = false,
@@ -134,4 +140,24 @@ h.test("rgjson windows long lines around the match", function()
 	h.eq(out[1].lnum, 7)
 	h.ok(#out[1].label < 260, "label not windowed: " .. #out[1].label)
 	h.ok(out[1].label:find("needle", 1, true), "match missing from label")
+end)
+
+h.test("excerpt drops indentation and moves the match with it", function()
+	local text, from, to = parse.excerpt("    local x = 1", 10, 11)
+	h.eq(text, "local x = 1")
+	h.eq({ from, to }, { 6, 7 })
+	h.eq(text:sub(from + 1, to), "x", "the range no longer covers the match")
+end)
+
+h.test("excerpt windows a long line around the match", function()
+	local line = string.rep("a", 500) .. "needle" .. string.rep("b", 500)
+	local text, from, to = parse.excerpt(line, 500, 506)
+	h.ok(#text < 260, "line not windowed: " .. #text)
+	h.eq(text:sub(from + 1, to), "needle", "the range lost the match")
+	h.eq(text:sub(1, 3), "…", "no marker where the line was cut")
+end)
+
+h.test("excerpt leaves a short line alone", function()
+	local text, from, to = parse.excerpt("local x = 1", 6, 7)
+	h.eq({ text, from, to }, { "local x = 1", 6, 7 })
 end)

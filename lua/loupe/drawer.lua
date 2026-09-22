@@ -459,8 +459,13 @@ local function prompt_line(session, cfg)
 	return text, spans
 end
 
---- One match row: padded, with the parent directory dimmed and the metadata
---- column right-aligned. Returns the line plus its highlight spans.
+--- The right-hand column never takes more than this share of the row: a long
+--- path should cost the text it sits beside a little room, not most of it.
+local META_SHARE = 0.4
+
+--- One match row: padded, the left text in chunks (a dimmed directory, or a
+--- matched line) and the metadata column right-aligned. Returns the line plus
+--- its highlight spans.
 local function match_line(session, cfg, item, width, selected)
 	local cand = item.cand
 	local parts = display.row(cand, { git = cfg.git and session.git or nil, icons = cfg.icons })
@@ -470,21 +475,31 @@ local function match_line(session, cfg, item, width, selected)
 		mark = session.marked[cand.abs] and "● " or "  "
 	end
 
+	local inner = math.max(1, width - PAD * 2)
 	local meta_text = {}
 	for _, chunk in ipairs(parts.meta) do
 		meta_text[#meta_text + 1] = chunk[1]
 	end
-	local right = table.concat(meta_text, "  ")
+	local right = fit(table.concat(meta_text, "  "), math.floor(inner * META_SHARE))
 
-	local inner = math.max(1, width - PAD * 2)
-	local left_prefix = mark .. (parts.icon ~= "" and (parts.icon .. " ") or "")
+	local prefix = mark .. (parts.icon ~= "" and (parts.icon .. " ") or "")
 	local right_room = right ~= "" and (vim.fn.strdisplaywidth(right) + GAP) or 0
-	local left_room = math.max(1, inner - vim.fn.strdisplaywidth(left_prefix) - right_room)
-	local label = fit(parts.dir .. parts.name, left_room)
+	local room = math.max(1, inner - vim.fn.strdisplaywidth(prefix) - right_room)
 
-	local left = left_prefix .. label
-	local gap = math.max(GAP, inner - vim.fn.strdisplaywidth(left) - vim.fn.strdisplaywidth(right))
-	local line = spaces(PAD) .. left .. spaces(right ~= "" and gap or (inner - vim.fn.strdisplaywidth(left)))
+	-- chunks are laid out left to right until the room runs out, so their
+	-- highlights can be placed as they are built
+	local left, chunks = "", {}
+	for _, chunk in ipairs(parts.left) do
+		local text = fit(chunk[1], math.max(0, room - vim.fn.strdisplaywidth(left)))
+		if text ~= "" then
+			chunks[#chunks + 1] = { #left, #left + #text, chunk[2] }
+			left = left .. text
+		end
+	end
+
+	local body = prefix .. left
+	local gap = math.max(GAP, inner - vim.fn.strdisplaywidth(body) - vim.fn.strdisplaywidth(right))
+	local line = spaces(PAD) .. body .. spaces(right ~= "" and gap or (inner - vim.fn.strdisplaywidth(body)))
 	local right_start = #line
 	line = line .. right
 	line = line .. spaces(width - vim.fn.strdisplaywidth(line))
@@ -504,13 +519,21 @@ local function match_line(session, cfg, item, width, selected)
 		spans[#spans + 1] = { at, at + #parts.icon, parts.icon_hl }
 		at = at + #parts.icon + 1
 	end
-	-- `at` now sits where the matched text starts, so matcher offsets land
-	-- without translation.
-	if #parts.dir > 0 then
-		spans[#spans + 1] = { at, at + math.min(#parts.dir, #label), "LoupeDir" }
+	-- `at` now sits where the left text starts, so offsets into it — the
+	-- matcher's and the source's own — land without translation
+	for _, chunk in ipairs(chunks) do
+		if chunk[3] then
+			spans[#spans + 1] = { at + chunk[1], at + chunk[2], chunk[3] }
+		end
+	end
+	local shown = #left
+	for _, range in ipairs(parts.marks or {}) do
+		if range[1] < shown then
+			spans[#spans + 1] = { at + range[1], at + math.min(range[2], shown), range[3], 200 }
+		end
 	end
 	for _, col in ipairs(item.positions) do
-		if col < #label then
+		if col < math.min(shown, parts.match_len) then
 			spans[#spans + 1] = { at + col, at + col + 1, "LoupeMatch", 200 }
 		end
 	end
@@ -520,7 +543,10 @@ local function match_line(session, cfg, item, width, selected)
 			if i > 1 then
 				col = col + 2
 			end
-			spans[#spans + 1] = { col, col + #chunk[1], chunk[2] or "LoupeMeta" }
+			local to = math.min(col + #chunk[1], right_start + #right)
+			if col < to then
+				spans[#spans + 1] = { col, to, chunk[2] or "LoupeMeta" }
+			end
 			col = col + #chunk[1]
 		end
 	end

@@ -235,3 +235,48 @@ h.test("an interior letter is never marked as the key", function()
 	-- the `c` of "duplicate" is the key, but pointing at it would mislead
 	h.eq(plain(drawer.menu({ { "c", "duplicate" } }, 200, "")), " duplicate c ")
 end)
+
+h.test("a location row puts its text left and its location right", function()
+	local item = {
+		cand = {
+			rel = "lua/a.lua",
+			abs = "/p/lua/a.lua",
+			text = "local M = {}",
+			meta = "lua/a.lua:12",
+			text_col = 6,
+			text_col_end = 7,
+			lnum = 12,
+		},
+		positions = {},
+	}
+	local lines, marks = render({ matches = { item }, candidates = {} })
+	local row = lines[2]
+	h.ok(row:find("local M = {}", 1, true), "text missing: " .. row)
+	h.ok(row:find("lua/a.lua:12%s*$"), "location is not at the right edge: " .. row)
+
+	local hit
+	for _, m in ipairs(marks) do
+		if m[4].hl_group == "LoupeMatch" and m[2] == 1 then
+			hit = { m[3], m[4].end_col }
+		end
+	end
+	h.ok(hit, "the match inside the line was not highlighted")
+	h.eq(row:sub(hit[1] + 1, hit[2]), "M", "the highlight is off the match: " .. row)
+end)
+
+h.test("a location row highlights only what is on the left", function()
+	-- the label spans both columns, so a match in the location must not be
+	-- painted over the text that happens to sit at that offset
+	local item = {
+		cand = { rel = "a.lua", abs = "/p/a.lua", text = "abc", meta = "a.lua:1", lnum = 1 },
+		positions = { 0, 10 },
+	}
+	local _, marks = render({ matches = { item }, candidates = {} })
+	local n = 0
+	for _, m in ipairs(marks) do
+		if m[4].hl_group == "LoupeMatch" then
+			n = n + 1
+		end
+	end
+	h.eq(n, 1, "a position past the left column was highlighted anyway")
+end)

@@ -80,27 +80,40 @@ end
 
 --- Longest match line shown in the list; rg ignores `--max-columns` under
 --- `--json`, so minified lines are windowed around the match here instead.
-local MAX_LABEL = 200
+local MAX_TEXT = 200
 
---- `text` cut to `MAX_LABEL` bytes around byte offset `from` (0-based).
-local function window(text, from)
-	if #text <= MAX_LABEL then
-		return text
+--- A matched line as the list should show it: leading indentation dropped and,
+--- when the line is long, a window around the match. Returns the text plus the
+--- match's byte range within it, so the list can highlight the same span the
+--- preview does.
+function M.excerpt(text, from, to)
+	local lead = #(text:match("^%s*") or "")
+	text, from, to = text:sub(lead + 1), math.max(0, (from or 0) - lead), math.max(0, (to or 0) - lead)
+	if #text <= MAX_TEXT then
+		return text, from, to
 	end
-	local start = math.max(1, from - math.floor(MAX_LABEL / 4))
-	local out = text:sub(start, start + MAX_LABEL - 1)
-	if start > 1 then
-		out = "…" .. out
+	local start = math.max(0, from - math.floor(MAX_TEXT / 4))
+	local out = text:sub(start + 1, start + MAX_TEXT)
+	local prefix = ""
+	if start > 0 then
+		prefix = "…"
 	end
-	if start + MAX_LABEL - 1 < #text then
+	if start + MAX_TEXT < #text then
 		out = out .. "…"
 	end
-	return out
+	local shift = start - #prefix
+	return prefix .. out, math.max(0, from - shift), math.max(0, math.min(to - shift, #prefix + #out))
+end
+
+--- Where a location is, as the right-hand column shows it.
+function M.location(rel, lnum)
+	return rel .. ":" .. tostring(lnum)
 end
 
 --- Parse `rg --json` (NDJSON) match event lines into candidates. Each submatch
 --- becomes a candidate carrying the exact byte range (`col`..`col_end`) so the
---- preview can highlight the occurrence. Handles text and base64 byte paths.
+--- preview can highlight the occurrence, plus the excerpt the list shows and
+--- that range translated into it. Handles text and base64 byte paths.
 function M.rgjson_lines(lines, root)
 	local out = {}
 	for _, line in ipairs(lines) do
@@ -117,10 +130,16 @@ function M.rgjson_lines(lines, root)
 					for _, sm in ipairs(d.submatches or {}) do
 						local from = sm.start or 0
 						local to = sm["end"] or from
+						local excerpt, ex_from, ex_to = M.excerpt(text, from, to)
+						local where = M.location(path, lnum)
 						out[#out + 1] = {
 							rel = path,
 							abs = vim.fs.joinpath(root, path),
-							label = path .. ":" .. lnum .. ": " .. window(text, from),
+							text = excerpt,
+							meta = where,
+							label = excerpt .. "  " .. where,
+							text_col = ex_from,
+							text_col_end = ex_to,
 							lnum = lnum,
 							col = from,
 							col_end = to,
@@ -145,10 +164,14 @@ function M.gitgrep(stdout, root)
 	for _, line in ipairs(run.lines(stdout)) do
 		local rel, lnum, text = line:match("^(.-):(%d+):(.*)$")
 		if rel then
+			local excerpt = M.excerpt(text, 0, 0)
+			local where = M.location(rel, lnum)
 			out[#out + 1] = {
 				rel = rel,
 				abs = vim.fs.joinpath(root, rel),
-				label = rel .. ":" .. lnum .. ": " .. text,
+				text = excerpt,
+				meta = where,
+				label = excerpt .. "  " .. where,
 				lnum = tonumber(lnum),
 				col = 0,
 				dir = false,

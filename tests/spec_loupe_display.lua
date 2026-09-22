@@ -7,21 +7,25 @@ local function meta_text(row)
 	end, row.meta)
 end
 
+--- The left column as `{ text, highlight }` pairs flattened for comparison.
+local function left(row)
+	return vim.tbl_map(function(chunk)
+		return { chunk[1], chunk[2] }
+	end, row.left)
+end
+
 h.test("row dims the parent directory and keeps the name", function()
 	local row = display.row({ rel = "lua/loupe/init.lua", abs = "/p/lua/loupe/init.lua" }, {})
-	h.eq(row.dir, "lua/loupe/")
-	h.eq(row.name, "init.lua")
-	h.eq(row.dir .. row.name, "lua/loupe/init.lua", "the matched text must survive the split")
+	h.eq(left(row), { { "lua/loupe/", "LoupeDir" }, { "init.lua" } })
+	h.eq(row.match_len, #"lua/loupe/init.lua", "the whole path must stay matchable")
 end)
 
 h.test("row leaves a bare filename undivided", function()
-	local row = display.row({ rel = "README.md" }, {})
-	h.eq(row.dir, "")
-	h.eq(row.name, "README.md")
+	h.eq(left(display.row({ rel = "README.md" }, {})), { { "", "LoupeDir" }, { "README.md" } })
 end)
 
 h.test("row marks directories with a trailing slash", function()
-	h.eq(display.row({ rel = "lua/loupe", dir = true }, {}).name, "loupe/")
+	h.eq(left(display.row({ rel = "lua/loupe", dir = true }, {}))[2], { "loupe/" })
 end)
 
 h.test("row carries the filetype in the metadata column", function()
@@ -52,8 +56,33 @@ h.test("row can be drawn without icons", function()
 	h.ok(display.row({ rel = "a.lua" }, {}).icon ~= "")
 end)
 
-h.test("row leaves a source's own label whole", function()
-	local row = display.row({ rel = "a/b.lua", label = "handler  a/b.lua", lnum = 3 }, {})
-	h.eq(row.dir, "", "a label is not a path to dim")
-	h.eq(row.name, "handler  a/b.lua")
+h.test("a location row puts its text left and where it is right", function()
+	local row = display.row({
+		rel = "a/b.lua",
+		text = "local M = {}",
+		meta = "a/b.lua:12",
+		label = "local M = {}  a/b.lua:12",
+		lnum = 12,
+	}, {})
+	h.eq(left(row), { { "local M = {}" } })
+	h.eq(meta_text(row), { "a/b.lua:12" })
+	h.eq(row.match_len, #"local M = {}", "only the left column is highlightable")
+	h.eq(row.marks, nil, "no match range was given")
+end)
+
+h.test("a location row carries the match range its source found", function()
+	local row = display.row({
+		rel = "a/b.lua",
+		text = "local M = {}",
+		meta = "a/b.lua:12",
+		text_col = 6,
+		text_col_end = 7,
+	}, {})
+	h.eq(row.marks, { { 6, 7, "LoupeMatch" } })
+end)
+
+h.test("a location row shows no filetype or git column", function()
+	local git = { ["a/b.lua"] = { text = "M", hl = "LoupeGitMod" } }
+	local row = display.row({ rel = "a/b.lua", text = "x", meta = "a/b.lua:1" }, { git = git })
+	h.eq(meta_text(row), { "a/b.lua:1" }, "the location is the whole right column")
 end)

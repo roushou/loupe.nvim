@@ -36,10 +36,14 @@ M.list = {
 				local rel = parse.relpath(ctx.root, name)
 				local lnum = d.lnum + 1
 				local sev = SEVERITY[d.severity]
+				local where = parse.location(rel, lnum)
+				local message = vim.trim((d.message or ""):gsub("%s*\n.*$", ""))
 				out[#out + 1] = {
 					rel = rel,
 					abs = name,
-					label = rel .. ":" .. lnum .. ": " .. (d.message or ""),
+					text = message,
+					meta = where,
+					label = message .. "  " .. where,
 					lnum = lnum,
 					col = d.col or 0,
 					col_end = (d.end_lnum == d.lnum) and d.end_col or nil,

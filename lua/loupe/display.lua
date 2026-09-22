@@ -59,28 +59,46 @@ local function meta(cand, ctx)
 end
 
 --- Parts of the row for `cand`. `ctx` is `{ git, icons }`.
---- @return table { icon, icon_hl, dir, name, meta }
+---
+--- `left` and `meta` are lists of `{ text, highlight }` chunks; `match_len`
+--- is how many bytes from the start of the left text the matcher's positions
+--- refer to, so a row whose searchable label spans both columns only
+--- highlights what is actually on the left. `marks` are ranges the source
+--- already knows about (a grep hit inside its line).
+--- @return table { icon, icon_hl, left, meta, match_len, marks }
 function M.row(cand, ctx)
 	ctx = ctx or {}
-	local dir, name
-	if cand.label then
-		dir, name = "", cand.label
-	else
-		dir, name = split_path(cand.rel)
-	end
-	if cand.dir and not name:match("/$") then
-		name = name .. "/"
-	end
 	local icon, icon_hl = "", nil
 	if ctx.icons ~= false then
 		icon, icon_hl = icons.for_candidate(cand)
 	end
+
+	-- a location row (grep, symbols, diagnostics) brings its own two columns
+	if cand.text then
+		local marks
+		if cand.text_col and cand.text_col_end and cand.text_col_end > cand.text_col then
+			marks = { { cand.text_col, cand.text_col_end, "LoupeMatch" } }
+		end
+		return {
+			icon = icon,
+			icon_hl = icon_hl,
+			left = { { cand.text } },
+			meta = cand.meta and { { cand.meta, "LoupeMeta" } } or {},
+			match_len = #cand.text,
+			marks = marks,
+		}
+	end
+
+	local dir, name = split_path(cand.rel)
+	if cand.dir and not name:match("/$") then
+		name = name .. "/"
+	end
 	return {
 		icon = icon,
 		icon_hl = icon_hl,
-		dir = dir,
-		name = name,
+		left = { { dir, "LoupeDir" }, { name } },
 		meta = meta(cand, ctx),
+		match_len = #dir + #name,
 	}
 end
 

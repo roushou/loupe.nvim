@@ -44,17 +44,19 @@ local function collector(n, cb)
 	end
 end
 
---- Symbol-kind glyph via `mini.icons` (optional dependency, so pcall).
-local function kind_icon(kind)
+--- Symbol-kind name, glyph and highlight. The glyph comes from `mini.icons`
+--- when it is installed (optional dependency, so pcall).
+local function kind_of(kind)
 	local name = kind and vim.lsp.protocol.SymbolKind[kind]
 	if not name then
-		return nil, nil
+		return nil, nil, nil
 	end
 	local ok, mini = pcall(require, "mini.icons")
 	if ok and type(mini.get) == "function" then
-		return mini.get("lsp", name)
+		local icon, hl = mini.get("lsp", name)
+		return name, icon, hl
 	end
-	return nil, nil
+	return name, nil, nil
 end
 
 --- Flatten SymbolInformation / hierarchical DocumentSymbol results.
@@ -62,11 +64,14 @@ local function flatten(symbols, out, path, root, depth)
 	for _, sym in ipairs(symbols) do
 		local range = sym.range or (sym.location and sym.location.range)
 		if sym.name and range then
-			local icon, icon_hl = kind_icon(sym.kind)
+			local kind, icon, icon_hl = kind_of(sym.kind)
+			local text = string.rep("  ", depth) .. sym.name
 			out[#out + 1] = {
 				rel = parse.relpath(root, path),
 				abs = path,
-				label = string.rep("  ", depth) .. sym.name,
+				text = text,
+				meta = kind,
+				label = kind and (text .. "  " .. kind) or text,
 				lnum = (range.start and range.start.line + 1) or 1,
 				col = 0,
 				icon = icon,
@@ -135,12 +140,16 @@ M.search = {
 						if sym.containerName and sym.containerName ~= "" then
 							name = name .. " (" .. sym.containerName .. ")"
 						end
-						local icon, icon_hl = kind_icon(sym.kind)
+						local _, icon, icon_hl = kind_of(sym.kind)
+						local lnum = (loc.range.start and loc.range.start.line + 1) or 1
+						local where = parse.location(rel, lnum)
 						out[#out + 1] = {
 							rel = rel,
 							abs = path,
-							label = name .. "  " .. rel,
-							lnum = (loc.range.start and loc.range.start.line + 1) or 1,
+							text = name,
+							meta = where,
+							label = name .. "  " .. where,
+							lnum = lnum,
 							col = 0,
 							icon = icon,
 							icon_hl = icon_hl,
