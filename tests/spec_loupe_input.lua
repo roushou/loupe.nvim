@@ -157,3 +157,41 @@ h.test("typing a query aims the selection", function()
 	h.eq(seen[1], false)
 	h.eq(seen[2], true, "a typed query left the picker resting")
 end)
+
+h.test("the chosen file is in the window before the chrome comes down", function()
+	-- The flash this guards against is a rendering artifact, so what is
+	-- asserted here is the invariant behind it: by the time the first of the
+	-- picker's windows closes, the window underneath already holds the file.
+	-- Close first and the teardown uncovers a frame of the old buffer.
+	local origin = vim.api.nvim_get_current_win()
+	local restore = vim.api.nvim_win_get_buf(origin)
+	local seen
+	local group = vim.api.nvim_create_augroup("loupe_spec_reveal", { clear = true })
+	vim.api.nvim_create_autocmd("WinClosed", {
+		group = group,
+		callback = function()
+			if seen == nil and vim.api.nvim_win_is_valid(origin) then
+				seen = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(origin))
+			end
+		end,
+	})
+
+	local real = vim.fn.LoupeGetChar
+	local keys = { vim.keycode("<C-N>"), vim.keycode("<CR>") }
+	local at = 0
+	vim.fn.LoupeGetChar = function()
+		at = at + 1
+		return keys[at] or vim.keycode("<Esc>")
+	end
+	local ok, err = pcall(session.open, { source = "_resting" })
+	vim.fn.LoupeGetChar = real
+	vim.api.nvim_del_augroup_by_id(group)
+	vim.api.nvim_win_set_buf(origin, restore)
+	h.ok(ok, tostring(err))
+
+	h.ok(seen ~= nil, "no window closed, so the picker never came down")
+	h.ok(
+		seen:find("README.md", 1, true) ~= nil,
+		"the window still held " .. vim.fn.fnamemodify(seen, ":t") .. " when the picker started closing"
+	)
+end)

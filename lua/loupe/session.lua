@@ -521,26 +521,33 @@ local function choose(kind)
 	end
 
 	local origin = S.origin_win
-	M.close()
 	if config.get().frecency and item.cand.abs then
 		frecency.record(item.cand.abs)
 	end
-	local win = origin and vim.api.nvim_win_is_valid(origin) and origin or vim.api.nvim_get_current_win()
-	vim.api.nvim_set_current_win(win)
-	if item.cand.bufnr and vim.api.nvim_buf_is_valid(item.cand.bufnr) then
-		open_buf(item.cand.bufnr, kind)
+
+	-- `bufadd` rather than `:edit`: it reuses a buffer already holding this
+	-- file, unsaved changes and all, where `:edit` would reload over them.
+	local bufnr = item.cand.bufnr
+	if not (bufnr and vim.api.nvim_buf_is_valid(bufnr)) then
+		bufnr = vim.fn.bufadd(item.cand.abs)
+	end
+
+	-- Same ordering, and the same forced paint, as `loupe.source.jump` — see
+	-- the note there. The window is switched and drawn while the picker still
+	-- covers it, so the teardown uncovers the file rather than a frame of
+	-- whatever was on screen before. The buffer loads on the set, which puts
+	-- the read, the filetype and whatever attaches to it behind the chrome
+	-- too.
+	if kind == "edit" and origin and vim.api.nvim_win_is_valid(origin) then
+		vim.bo[bufnr].buflisted = true
+		vim.api.nvim_win_set_buf(origin, bufnr)
+		vim.cmd("redraw")
+		M.close({ restore_cursor = false })
 		return false
 	end
-	local path = vim.fn.fnameescape(item.cand.abs)
-	if kind == "split" then
-		vim.cmd("split " .. path)
-	elseif kind == "vsplit" then
-		vim.cmd("vsplit " .. path)
-	elseif kind == "tab" then
-		vim.cmd("tabedit " .. path)
-	else
-		vim.cmd("edit " .. path)
-	end
+
+	M.close()
+	open_buf(bufnr, kind)
 	return false
 end
 

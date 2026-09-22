@@ -9,6 +9,13 @@
 --- the common `edit` case the origin window is switched and positioned *before*
 --- the picker (and its preview overlay) is torn down, so the change is hidden
 --- and the file is already on the target line when it becomes visible.
+---
+--- Switching it is not enough on its own, though. A window under a float is
+--- left marked for redraw rather than repainted, so tearing the chrome down
+--- uncovers one frame of whatever the window held before — the very flash the
+--- ordering is there to prevent. Forcing the paint while the chrome still
+--- covers the window costs a frame nobody can see and makes the reveal show
+--- the finished buffer.
 
 local M = {}
 
@@ -54,6 +61,7 @@ function M.choose(cand, kind, ctx)
 		-- final (seamless) state is ever drawn.
 		local top = require("loupe.preview").topline()
 		show(origin, cand, top)
+		vim.cmd("redraw")
 		ctx.close({ restore_cursor = false })
 		place(origin, cand, top)
 		return false
