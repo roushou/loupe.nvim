@@ -7,10 +7,11 @@
 --- rather than followed.
 ---
 ---   row 1         prompt: source glyph, query, caret, count
----   rows 2..h-1   matches, one per line
----   row h         hint bar: what the keys do right now
+---   rows 2..h     matches, one per line
 ---
---- The source tabs live in the window bar, where they cost no list rows.
+--- The window bar is the picker's only chrome: source tabs, the keys that
+--- open each menu, and the menus themselves when one is open. It costs no
+--- list rows of its own.
 
 local hl = require("loupe.util.hl")
 local buf = require("loupe.util.buf")
@@ -26,6 +27,49 @@ local ns = vim.api.nvim_create_namespace("loupe_matches")
 local PAD = 1
 -- Gap between the left text and the right-hand metadata column.
 local GAP = 2
+
+--- Resolved attributes of `group`, links followed.
+local function resolve(group)
+	local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = group, link = false })
+	return ok and hl or {}
+end
+
+--- `rgb` moved `amount` towards white when it is dark, towards black when it
+--- is light: the same nudge reads as "lifted" in either kind of theme.
+local function shade(rgb, amount)
+	local r, g, b = math.floor(rgb / 65536) % 256, math.floor(rgb / 256) % 256, rgb % 256
+	local target = (0.299 * r + 0.587 * g + 0.114 * b) < 128 and 255 or 0
+	local function mix(c)
+		return math.floor(c + (target - c) * amount + 0.5)
+	end
+	return mix(r) * 65536 + mix(g) * 256 + mix(b)
+end
+
+--- Highlights for the strip while a menu is open.
+---
+--- The strip keeps the colours it already had — only its background shifts, a
+--- nudge away from the normal one, so the eye has nothing to re-find. The key
+--- to press is marked by weight rather than by another colour, for the same
+--- reason. Themes without a background of their own fall back to CursorLine,
+--- which is the same idea already solved by the theme.
+local function select_highlights()
+	local base = resolve("Normal").bg
+	if not base then
+		vim.api.nvim_set_hl(0, "LoupeTabSelect", { link = "CursorLine", default = true })
+		vim.api.nvim_set_hl(0, "LoupeTabSelectActive", { link = "CursorLine", default = true })
+		vim.api.nvim_set_hl(0, "LoupeTabSelectKey", { bold = true, underline = true, default = true })
+		return
+	end
+	local bg = shade(base, 0.1)
+	vim.api.nvim_set_hl(0, "LoupeTabSelect", { fg = resolve("Comment").fg, bg = bg, default = true })
+	vim.api.nvim_set_hl(0, "LoupeTabSelectActive", {
+		fg = resolve("Title").fg,
+		bg = bg,
+		bold = true,
+		default = true,
+	})
+	vim.api.nvim_set_hl(0, "LoupeTabSelectKey", { bg = bg, bold = true, underline = true, default = true })
+end
 
 local function define_highlights()
 	vim.api.nvim_set_hl(0, "LoupeMatch", { link = "Search", default = true })
@@ -46,11 +90,10 @@ local function define_highlights()
 	vim.api.nvim_set_hl(0, "LoupeMetaFlag", { link = "DiagnosticWarn", default = true })
 	vim.api.nvim_set_hl(0, "LoupeGhost", { link = "Comment", default = true })
 	vim.api.nvim_set_hl(0, "LoupeCount", { link = "LineNr", default = true })
-	vim.api.nvim_set_hl(0, "LoupeKey", { link = "Special", default = true })
-	vim.api.nvim_set_hl(0, "LoupeHint", { link = "Comment", default = true })
 	vim.api.nvim_set_hl(0, "LoupeTab", { link = "Comment", default = true })
 	vim.api.nvim_set_hl(0, "LoupeTabActive", { link = "Title", default = true })
 	vim.api.nvim_set_hl(0, "LoupeEmpty", { link = "Comment", default = true })
+	select_highlights()
 end
 
 --- Open the split at `height` lines and return { win, buf }.
@@ -77,18 +120,25 @@ function M.open(height)
 		list = false,
 		scrolloff = 0,
 		winhighlight = "Normal:Normal,WinBar:LoupeBorder,WinBarNC:LoupeBorder",
-		winbar = "",
+		-- claimed up front so the row it costs is in the geometry from the
+		-- first render, before there are tabs to put in it
+		winbar = " ",
 	})
 
 	return { win = winid, buf = bufnr }
 end
 
---- How many match rows fit: everything but the prompt and the hint bar.
+--- How many match rows fit: everything but the prompt.
+---
+--- A window bar takes a row from the text area while `nvim_win_get_height()`
+--- keeps reporting the full height, so it has to be subtracted by hand — miss
+--- it and the last row is drawn below the fold, where nothing shows it.
 function M.capacity(winid)
 	if not (winid and vim.api.nvim_win_is_valid(winid)) then
 		return 1
 	end
-	return math.max(1, vim.api.nvim_win_get_height(winid) - 2)
+	local bar = (vim.wo[winid].winbar or "") ~= "" and 1 or 0
+	return math.max(1, vim.api.nvim_win_get_height(winid) - bar - 1)
 end
 
 -- ---------------------------------------------------------------------------
@@ -154,26 +204,29 @@ local function root_text(session)
 	return vim.fn.fnamemodify(session.root, ":~")
 end
 
---- Source tabs as a window-bar string, the active source highlighted. The
---- strip is sliced to `width` around the active tab, so a narrow window keeps
---- showing where you are rather than the first few sources.
-function M.tabs(sources, active, width, right)
-	local blocks, col = {}, 0
-	for _, src in ipairs(sources) do
-		local text = " " .. (src.tab or src.label or src.name) .. " "
-		blocks[#blocks + 1] = { text = text, from = col, to = col + #text, active = src.name == active }
-		col = col + #text
+--- Render `blocks` as a window-bar string, sliced to `width` around the one
+--- named `focus` so a narrow window keeps showing where you are rather than
+--- the first few entries. `right` is pinned to the right edge.
+local function strip(blocks, width, focus, right, fill)
+	local col = 0
+	for _, b in ipairs(blocks) do
+		b.from, b.to = col, col + #b.text
+		col = col + #b.text
 	end
 
 	right = right or ""
 	local avail = math.max(1, width - (right == "" and 0 or #right + 2))
 	local offset = 0
-	if col > avail then
+	if col > avail and focus then
+		local from, to
 		for _, b in ipairs(blocks) do
-			if b.active then
-				offset = math.min(math.max(math.floor((b.from + b.to) / 2) - math.floor(avail / 2), 0), col - avail)
-				break
+			if b.name == focus then
+				from = math.min(from or b.from, b.from)
+				to = math.max(to or b.to, b.to)
 			end
+		end
+		if from then
+			offset = math.min(math.max(math.floor((from + to) / 2) - math.floor(avail / 2), 0), col - avail)
 		end
 	end
 
@@ -182,16 +235,81 @@ function M.tabs(sources, active, width, right)
 		local from, to = math.max(b.from, offset), math.min(b.to, offset + avail)
 		if to > from then
 			local text = b.text:sub(from - b.from + 1, to - b.from)
-			parts[#parts + 1] = ("%%#%s#%s"):format(
-				b.active and "LoupeTabActive" or "LoupeTab",
-				text:gsub("%%", "%%%%")
-			)
+			parts[#parts + 1] = ("%%#%s#%s"):format(b.group, text:gsub("%%", "%%%%"))
 		end
 	end
+	-- the fill before `%=` carries the last highlight, so a lit strip runs the
+	-- whole width rather than stopping at the last entry
+	parts[#parts + 1] = "%#" .. fill .. "#%="
 	if right ~= "" then
-		parts[#parts + 1] = "%=%#LoupeTab#" .. right:gsub("%%", "%%%%") .. " "
+		parts[#parts + 1] = right:gsub("%%", "%%%%") .. " "
 	end
 	return table.concat(parts)
+end
+
+--- Whether `key` is the letter `label` starts with. Only the first letter is
+--- ever marked: underlining the `c` of "dupli[c]ate" would name the key
+--- without pointing at anything a reader can follow. A shifted key is never
+--- marked either — the `y` of "yank" is not `Y`.
+local function starts_with_key(label, key)
+	return key ~= nil and #key == 1 and not key:match("%u") and label:sub(1, 1):lower() == key:lower()
+end
+
+--- One entry, split so its key can be marked without moving the label: the
+--- text stays put and only that letter changes weight. A key that is not the
+--- first letter is appended, and a named key (`enter`, `ctrl+x`) leads.
+local function entry_blocks(label, key, group, name, marked)
+	local function block(text, g)
+		return { text = text, group = g or group, name = name }
+	end
+	if not marked or not key or key == "" then
+		return { block(" " .. label .. " ") }
+	end
+	if starts_with_key(label, key) then
+		return {
+			block(" "),
+			block(label:sub(1, 1), "LoupeTabSelectKey"),
+			block(label:sub(2) .. " "),
+		}
+	end
+	if #key > 1 then
+		return { block(" "), block(key, "LoupeTabSelectKey"), block(" " .. label .. " ") }
+	end
+	return { block(" " .. label .. " "), block(key, "LoupeTabSelectKey"), block(" ") }
+end
+
+--- Source tabs, the active source highlighted. `opts` is
+--- `{ right, hint, select, keys }`: `hint` is the key that opens the source
+--- menu, shown at the left so the row says how to change it. While `select`
+--- is set the strip keeps its text and takes a lifted background, and each
+--- tab's key is marked in place.
+function M.tabs(sources, active, width, opts)
+	opts = opts or {}
+	local select = opts.select == true
+	local normal = select and "LoupeTabSelect" or "LoupeTab"
+	local current = select and "LoupeTabSelectActive" or "LoupeTabActive"
+
+	local blocks = {}
+	if opts.hint and opts.hint ~= "" then
+		blocks[#blocks + 1] = { text = " " .. opts.hint .. " ", group = normal }
+	end
+	for _, src in ipairs(sources) do
+		local label = src.tab or src.label or src.name
+		local key = opts.keys and opts.keys[src.name]
+		local group = src.name == active and current or normal
+		vim.list_extend(blocks, entry_blocks(label, key, group, src.name, select))
+	end
+	return strip(blocks, width, active, opts.right, normal)
+end
+
+--- A menu as a lit strip: the same tabs treatment, every entry marked with
+--- its key.
+function M.menu(entries, width, right)
+	local blocks = {}
+	for _, entry in ipairs(entries) do
+		vim.list_extend(blocks, entry_blocks(entry[2], M.friendly_key(entry[1]), "LoupeTabSelect", nil, true))
+	end
+	return strip(blocks, width, nil, right, "LoupeTabSelect")
 end
 
 --- Key notation as a person would say it: `<C-X>` -> `ctrl+x`.
@@ -233,77 +351,66 @@ local ACTION_ORDER = {
 	"yank_dir",
 }
 
---- First key bound to `action` in `map`, in a stable order.
+--- First key bound to `action` in `map`, in a stable order. `<Esc>` wins when
+--- it is one of them: it is the one people reach for.
 local function key_for(map, action)
 	local found
 	for lhs, name in pairs(map) do
-		if name == action and (not found or lhs < found) then
-			found = lhs
+		if name == action then
+			if lhs:lower() == "<esc>" then
+				return lhs
+			end
+			if not found or lhs < found then
+				found = lhs
+			end
 		end
 	end
 	return found
 end
 
---- The hint bar: `{ key, label }` pairs for whatever the next keypress can do.
---- While a submenu is open it lists that menu; otherwise the handful of keys
---- worth advertising.
-function M.hints(session, cfg)
-	local maps = cfg.mappings or {}
+--- Source name -> the key that switches to it.
+local function source_keys(map)
 	local out = {}
-	if session.prompt then
-		for _, pair in ipairs({ { "submit", "confirm" }, { "cancel", "cancel" } }) do
-			local key = key_for(maps.prompt or {}, pair[1])
-			if key then
-				out[#out + 1] = { key, pair[2] }
-			end
-		end
-		return out
-	end
-	if session.menu == "sources" then
-		-- listed in tab order, so the menu and the strip agree
-		for _, src in ipairs(session.sources or {}) do
-			local key = key_for(maps.sources or {}, src.name)
-			if key then
-				out[#out + 1] = { key, src.tab or src.label or src.name }
-			end
-		end
-		return out
-	end
-	if session.menu == "actions" then
-		local map = maps.menu or {}
-		local seen = {}
-		for _, action in ipairs(ACTION_ORDER) do
-			local key = key_for(map, action)
-			if key then
-				seen[key] = true
-				out[#out + 1] = { key, M.action_label(session, action) }
-			end
-		end
-		local rest = {}
-		for key in pairs(map) do
-			if not seen[key] then
-				rest[#rest + 1] = key
-			end
-		end
-		table.sort(rest)
-		for _, key in ipairs(rest) do
-			out[#out + 1] = { key, M.action_label(session, map[key]) }
-		end
-		return out
-	end
-	for _, pair in ipairs({
-		{ "open", "open" },
-		{ "menu", "actions" },
-		{ "sources", "sources" },
-		{ "mark", "mark" },
-	}) do
-		local key = key_for(maps.browse or {}, pair[1])
-		if key then
-			out[#out + 1] = { key, pair[2] }
+	for lhs, name in pairs(map or {}) do
+		if not out[name] or lhs < out[name] then
+			out[name] = lhs
 		end
 	end
 	return out
 end
+
+--- The action menu's `{ key, label }` pairs, in the order they are offered.
+function M.action_entries(session, cfg)
+	local map = (cfg.mappings or {}).menu or {}
+	local out, seen = {}, {}
+	for _, action in ipairs(ACTION_ORDER) do
+		local key = key_for(map, action)
+		if key then
+			seen[key] = true
+			out[#out + 1] = { key, M.action_label(session, action) }
+		end
+	end
+	local rest = {}
+	for key in pairs(map) do
+		if not seen[key] then
+			rest[#rest + 1] = key
+		end
+	end
+	table.sort(rest)
+	for _, key in ipairs(rest) do
+		out[#out + 1] = { key, M.action_label(session, map[key]) }
+	end
+	return out
+end
+
+-- Action names are identifiers; these are what they are called on screen.
+local ACTION_NAMES = {
+	open_external = "open ext",
+	yank = "yank path",
+	yank_rel = "yank rel",
+	yank_name = "yank name",
+	yank_dir = "yank dir",
+}
 
 --- Name an action as the active source performs it, so the hint never
 --- promises something the key does not do (`delete` closes a buffer in the
@@ -312,7 +419,7 @@ function M.action_label(session, name)
 	if name == "delete" and session.source and session.source.delete == "buffer" then
 		return "close"
 	end
-	return name
+	return ACTION_NAMES[name] or name
 end
 
 -- ---------------------------------------------------------------------------
@@ -420,23 +527,46 @@ local function match_line(session, cfg, item, width, selected)
 	return line, spans
 end
 
---- Hint bar line: `key label` pairs, keys bright and labels dim.
-local function bar_line(session, cfg, width)
-	local spans, parts, col = {}, {}, PAD
-	for _, hint in ipairs(M.hints(session, cfg)) do
-		local key = M.friendly_key(hint[1])
-		local text = key .. " " .. hint[2]
-		if #parts > 0 then
-			parts[#parts + 1] = "  "
-			col = col + 2
-		end
-		parts[#parts + 1] = text
-		spans[#spans + 1] = { col, col + #key, "LoupeKey" }
-		spans[#spans + 1] = { col + #key, col + #text, "LoupeHint" }
-		col = col + #text
+--- The window bar: source tabs, or the action menu while it is open. It is
+--- the picker's only chrome, so the keys that open each menu live here too —
+--- the source key at the left, and, when the root has nothing to say, the
+--- action key at the right.
+local function winbar_text(session, cfg, width)
+	local maps = cfg.mappings or {}
+	local function browse_key(action)
+		return M.friendly_key(key_for(maps.browse or {}, action) or "")
 	end
-	local line = spaces(PAD) .. fit(table.concat(parts), math.max(1, width - PAD * 2))
-	return line .. spaces(width - vim.fn.strdisplaywidth(line)), spans
+	local cancel = browse_key("close") .. " cancel"
+
+	if session.prompt then
+		local prompt_map = maps.prompt or {}
+		local entries = {}
+		for _, pair in ipairs({ { "submit", "confirm" }, { "cancel", "cancel" } }) do
+			local key = key_for(prompt_map, pair[1])
+			if key then
+				entries[#entries + 1] = { key, pair[2] }
+			end
+		end
+		return M.menu(entries, width, "")
+	end
+
+	if session.menu == "actions" then
+		return M.menu(M.action_entries(session, cfg), width, cancel)
+	end
+
+	local select = session.menu == "sources"
+	local right = root_text(session)
+	if right == "" and not select then
+		right = browse_key("menu") .. " actions"
+	end
+	return M.tabs(session.sources or {}, session.source and session.source.name, width, {
+		right = select and cancel or right,
+		-- kept while selecting: dropping it would slide every tab left, and
+		-- the one thing this state must not do is move
+		hint = browse_key("sources"),
+		select = select,
+		keys = source_keys(maps.sources),
+	})
 end
 
 --- First visible match, kept so the selection stays on screen.
@@ -467,6 +597,8 @@ function M.render(session, cfg)
 	end
 
 	local width = vim.api.nvim_win_get_width(winid)
+	-- set before measuring: the bar takes one of the window's rows
+	vim.wo[winid].winbar = winbar_text(session, cfg, width)
 	local rows = M.capacity(winid)
 	local lines, all = {}, {}
 
@@ -477,7 +609,7 @@ function M.render(session, cfg)
 	if #session.matches == 0 then
 		lines[2] = spaces(PAD) .. (session.loaded and "(no matches)" or "(loading…)")
 		all[2] = { { PAD, #lines[2], "LoupeEmpty" } }
-		for i = 3, rows + 1 do
+		for i = 3, rows do
 			lines[i] = ""
 		end
 	else
@@ -493,8 +625,6 @@ function M.render(session, cfg)
 			end
 		end
 	end
-	lines[rows + 2], all[rows + 2] = bar_line(session, cfg, width)
-
 	vim.bo[bufnr].modifiable = true
 	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 	vim.bo[bufnr].modifiable = false
@@ -511,8 +641,6 @@ function M.render(session, cfg)
 	end
 	hl.virt_text(bufnr, ns, 0, M.count_text(session) .. " ", "LoupeCount", { virt_text_pos = "right_align" })
 
-	vim.wo[winid].winbar =
-		M.tabs(session.sources or {}, session.source and session.source.name, width, root_text(session))
 	-- the viewport is drawn, never scrolled to
 	pcall(vim.api.nvim_win_set_cursor, winid, { 1, 0 })
 

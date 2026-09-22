@@ -3,9 +3,11 @@
 local M = {}
 
 M.defaults = {
-	--- Drawer height in lines. May be a number or a function returning one.
+	--- Drawer height in lines, window bar included. May be a number or a
+	--- function returning one. Three of those lines are chrome (tabs, prompt,
+	--- hints), so the floor leaves room for a useful number of matches.
 	height = function()
-		return math.max(8, math.floor(vim.o.lines * 0.33))
+		return math.max(10, math.floor(vim.o.lines * 0.33))
 	end,
 
 	--- Cap on ranked results rendered (and previewed).

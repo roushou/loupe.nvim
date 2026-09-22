@@ -57,7 +57,7 @@ vim.keymap.set("n", "<leader>ss", function() require("loupe").open({ source = "d
 | --- | --- |
 | `<CR>` | Open |
 | `<C-s>` / `<C-v>` / `<C-t>` | Open in split / vsplit / tab |
-| `<C-o>` | Source menu (`f d b r c g s t e`) |
+| `<C-o>` | Source menu — lights up the tabs and marks each with its key |
 | `<C-x>` | Action menu (`r` rename, `d` delete — closes the buffer in the `buffers` source, `a` add, `c` duplicate, `y`/`Y`/`n`/`D` yank path/relative/name/dir, `o` open externally, `q` quickfix) |
 | `<Tab>` | Mark (marks feed quickfix) |
 | `<C-r>` | Jump back to the project root |
@@ -67,11 +67,13 @@ vim.keymap.set("n", "<leader>ss", function() require("loupe").open({ source = "d
 
 `:Loupe [source]` opens a specific source (`:Loupe grep`, `:Loupe symbols`, …).
 
-The window bar carries the source tabs, the prompt row the source glyph and
-the count (`shown/total` for list sources, `found` for live ones — `+` means
-the search stopped at `max_results`, `…` that it is still running), and the
-bottom row shows what the next keypress can do. Reopening renders the last
-file list at once and refreshes it in the background.
+The window bar carries the source tabs and the keys that open each menu; the
+prompt row carries the source glyph and the count (`shown/total` for list
+sources, `found` for live ones — `+` means the search stopped at
+`max_results`, `…` that it is still running). `<C-o>` and `<C-x>` mark each
+entry with its key and tint that strip rather than opening anything.
+Reopening renders the last file list at once and refreshes it in the
+background.
 
 ## API
 
@@ -119,10 +121,10 @@ vim.api.nvim_set_hl(0, "LoupeSelection", { link = "CursorLine" })
 | `LoupeMeta` | `LineNr` | the right-hand metadata column |
 | `LoupeMetaFlag` | `DiagnosticWarn` | the modified-buffer marker |
 | `LoupeTab` / `LoupeTabActive` | `Comment` / `Title` | source tabs |
+| `LoupeTabSelect` / `LoupeTabSelectActive` / `LoupeTabSelectKey` | computed from `Normal` | the strip while a menu is open, and the key to press |
 | `LoupePrompt` / `LoupePromptCaret` | `Title` | prompt prefix and caret |
 | `LoupeGhost` | `Comment` | the source name on an empty query |
 | `LoupeCount` | `LineNr` | the result count |
-| `LoupeKey` / `LoupeHint` | `Special` / `Comment` | the hint bar |
 | `LoupeGit*` | diagnostic colours | git status markers |
 
 ## Dependencies

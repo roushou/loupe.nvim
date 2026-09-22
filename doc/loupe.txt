@@ -82,11 +82,24 @@ new keystroke stops the running search before starting the next.
 `files` and `dirs` are cached per root: reopening the picker shows the last
 list immediately while a fresh enumeration replaces it in the background.
 
-The drawer is laid out as a fixed viewport: the prompt on the first row, one
-match per row after it, and a hint bar on the last row listing what the next
-keypress does. The window bar holds the source tabs (the active one
-highlighted) and, when browsing away from the project root, that root on the
-right (`<BS>` on an empty query goes up, `<C-r>` returns).
+The drawer is laid out as a fixed viewport: the prompt on the first row and
+one match per row after it. The window bar is the only chrome: it holds the
+source tabs (the active one highlighted) prefixed by the key that switches
+them, and on the right either the current root, when browsing away from the
+project root (`<BS>` on an empty query goes up, `<C-r>` returns), or the key
+that opens the action menu.
+
+Both menus take over that strip rather than opening anything: `<C-o>` marks
+each tab with its own key, `<C-x>` replaces the tabs with the actions, and an
+inline prompt shows how to confirm or cancel. The strip takes a lifted
+background while one of them is open — a nudge from the normal one, computed
+from it, so nothing else about the row changes.
+
+Labels do not move: a key that is the label's first letter is underlined
+where it already is, and one that is not is appended (`Doc t`, `yank rel Y`).
+An interior letter is never marked, and neither is a shifted key. Any other
+key cancels, which the strip says while it is lit. Rebinding
+`mappings.sources` or `mappings.menu` changes the keys shown.
 
 The prompt shows the source glyph, the source name while the query is empty,
 and the count on the right: `shown/total` for list sources, `found` for live
@@ -101,7 +114,7 @@ full set.
 
 >lua
     require("loupe").setup({
-      height = function() return math.max(8, math.floor(vim.o.lines * 0.33)) end,
+      height = function() return math.max(10, math.floor(vim.o.lines * 0.33)) end,
       max_results = 200,
       default_source = "files",
       root = function() ... end,
@@ -176,12 +189,18 @@ so a colourscheme applies without configuration. Override any of them:
   LoupeMetaFlag       DiagnosticWarn      the modified-buffer marker
   LoupeTab            Comment             an inactive source tab
   LoupeTabActive      Title               the active source tab
+  LoupeTabSelect      computed            the strip while a menu is open
+  LoupeTabSelectActive computed           the active tab while a menu is open
+  LoupeTabSelectKey   computed            the key to press
+
+The three computed groups take the normal colours with a background lifted
+away from `Normal`'s (darkened on a light theme), so a menu changes nothing
+but the tint. Themes with no background of their own fall back to
+`CursorLine`. Set any of them yourself to take over.
   LoupePrompt         Title               the prompt prefix
   LoupePromptCaret    LoupePrompt         the caret
   LoupeGhost          Comment             the source name on an empty query
   LoupeCount          LineNr              the result count
-  LoupeKey            Special             a key in the hint bar
-  LoupeHint           Comment             its label
   LoupeEmpty          Comment             the "no matches" line
   LoupeMark           DiagnosticInfo      the <Tab> mark
   LoupeBorder         FloatBorder         the window bar
