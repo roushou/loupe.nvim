@@ -218,6 +218,23 @@ local function set_source(name)
 	reload()
 end
 
+--- Switch to the source `delta` places along the tab strip, wrapping at both
+--- ends so the strip can be walked in either direction.
+local function cycle_source(delta)
+	local order = source.order
+	local at
+	for i, src in ipairs(order) do
+		if src == S.source then
+			at = i
+			break
+		end
+	end
+	if not at then
+		return
+	end
+	set_source(order[(at - 1 + delta) % #order + 1].name)
+end
+
 --- Run a committed action by name and refresh the view.
 local function run_action(name, value)
 	local item = current()
@@ -627,6 +644,7 @@ function M.open(opts)
 		set_query = set_query,
 		start_prompt = start_prompt,
 		set_source = set_source,
+		cycle_source = cycle_source,
 		run_action = run_action,
 		start_delete = start_delete,
 		mouse_select = mouse_select,

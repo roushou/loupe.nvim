@@ -10,7 +10,8 @@
 ---
 --- `ctx` fields: `state` (session table), `is_active`, `render`, `close`,
 --- `choose`, `reload`, `refresh`, `move`, `page`, `current`, `set_query`,
---- `start_prompt`, `start_delete`, `set_source`, `run_action`, `mouse_select`,
+--- `start_prompt`, `start_delete`, `set_source`, `cycle_source`, `run_action`,
+--- `mouse_select`,
 --- `yank`, `go_parent`, `go_root`, `toggle_mark`, `quickfix`,
 --- `open_external`.
 
@@ -125,6 +126,10 @@ local function handle_browse(ctx, map, ch, key)
 		S.menu = "actions"
 	elseif action == "sources" then
 		S.menu = "sources"
+	elseif action == "source_next" then
+		ctx.cycle_source(1)
+	elseif action == "source_prev" then
+		ctx.cycle_source(-1)
 	elseif action == "root" then
 		ctx.go_root()
 	elseif action == "mark" then

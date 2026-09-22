@@ -112,3 +112,11 @@ h.test("only the buffers source reinterprets delete", function()
 		end
 	end
 end)
+
+h.test("the tab order is the order sources were registered", function()
+	local names = vim.tbl_map(function(src)
+		return src.name
+	end, source.order)
+	h.eq(names[1], "files", "files must lead the strip")
+	h.eq(#names, vim.tbl_count(source.registry), "a source is missing from the order")
+end)

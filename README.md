@@ -57,7 +57,8 @@ vim.keymap.set("n", "<leader>ss", function() require("loupe").open({ source = "d
 | --- | --- |
 | `<CR>` | Open |
 | `<C-s>` / `<C-v>` / `<C-t>` | Open in split / vsplit / tab |
-| `<C-o>` | Source menu — lights up the tabs and marks each with its key |
+| `<C-o>` | Source menu — marks each tab with its key |
+| `<C-Right>` / `<C-Left>` | Next / previous source |
 | `<C-x>` | Action menu (`r` rename, `d` delete — closes the buffer in the `buffers` source, `a` add, `c` duplicate, `y`/`Y`/`n`/`D` yank path/relative/name/dir, `o` open externally, `q` quickfix) |
 | `<Tab>` | Mark (marks feed quickfix) |
 | `<C-r>` | Jump back to the project root |

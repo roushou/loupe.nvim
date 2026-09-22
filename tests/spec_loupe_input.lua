@@ -84,3 +84,28 @@ h.test("opening again recovers from a session whose drawer is gone", function()
 	h.ok(opened, "the picker refused to open after an aborted session")
 	h.eq(session.is_active(), false)
 end)
+
+h.test("the source keys step along the tab strip", function()
+	local real = vim.fn.LoupeGetChar
+	local seen = {}
+	local keys = { vim.keycode("<C-Right>"), vim.keycode("<C-Right>"), vim.keycode("<C-Left>"), vim.keycode("<Esc>") }
+	local at = 0
+	vim.fn.LoupeGetChar = function()
+		-- the window bar says which source is active when each key is read
+		for _, win in ipairs(vim.api.nvim_list_wins()) do
+			local bar = vim.wo[win].winbar or ""
+			if bar:find("LoupeTab", 1, true) then
+				seen[#seen + 1] = bar:match("LoupeTabActive#%s*([%w]+)")
+			end
+		end
+		at = at + 1
+		return keys[at] or vim.keycode("<Esc>")
+	end
+	session.open()
+	vim.fn.LoupeGetChar = real
+
+	h.eq(seen[1], "Files", "the picker did not start on the default source")
+	h.eq(seen[2], "Dirs", "<C-Right> did not step forward")
+	h.eq(seen[3], "Buffers")
+	h.eq(seen[4], "Dirs", "<C-Left> did not step back")
+end)
