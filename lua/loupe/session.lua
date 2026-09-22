@@ -40,7 +40,7 @@ end
 
 local function page()
 	if S.drawer_win and vim.api.nvim_win_is_valid(S.drawer_win) then
-		return math.max(1, vim.api.nvim_win_get_height(S.drawer_win) - 1)
+		return drawer.capacity(S.drawer_win)
 	end
 	return 10
 end
@@ -517,13 +517,15 @@ local function choose(kind)
 	return false
 end
 
---- Select the match under the mouse (if the click was in the drawer).
+--- Select the match under the mouse (if the click was in the drawer). Row 1
+--- is the prompt and the last row is the hint bar; the rows between show the
+--- viewport starting at `S.top`.
 local function mouse_select()
 	local mp = vim.fn.getmousepos()
 	if mp.winid ~= S.drawer_win or mp.line < 2 then
 		return false
 	end
-	local idx = mp.line - 1
+	local idx = (S.top or 1) + mp.line - 2
 	if idx < 1 or idx > #S.matches then
 		return false
 	end
@@ -556,6 +558,9 @@ function M.open(opts)
 		caret = 0,
 		matches = {},
 		index = 0,
+		-- first match drawn (the drawer keeps this in step with `index`)
+		top = 1,
+		sources = source.order,
 		marked = {},
 		git = nil,
 		prompt = nil,

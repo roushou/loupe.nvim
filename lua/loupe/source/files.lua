@@ -8,7 +8,7 @@ local backend = require("loupe.backend")
 return {
 	name = "files",
 	label = "Files",
-	icon = "",
+	icon = "󰈔",
 	cache = true,
 	list = function(ctx, cb)
 		backend.list(ctx, "files", function(cands)

@@ -11,7 +11,7 @@
 return {
 	name = "buffers",
 	label = "Buffers",
-	icon = "",
+	icon = "󰈙",
 	backend = { "nvim" },
 	delete = "buffer",
 }

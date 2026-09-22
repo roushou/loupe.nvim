@@ -6,7 +6,8 @@
 return {
 	name = "symbols",
 	label = "Workspace symbols",
-	icon = "",
+	tab = "Symbols",
+	icon = "󰅩",
 	backend = { "lsp" },
 	search = "symbols",
 }

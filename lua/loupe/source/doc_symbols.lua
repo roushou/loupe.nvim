@@ -7,6 +7,7 @@
 return {
 	name = "doc_symbols",
 	label = "Document symbols",
-	icon = "",
+	tab = "Doc",
+	icon = "󰈙",
 	backend = { "lsp" },
 }

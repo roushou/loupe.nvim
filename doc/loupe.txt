@@ -11,6 +11,7 @@ CONTENTS                                                *loupe-contents*
   6. Actions ............................. |loupe-actions|
   7. Health .............................. |loupe-health|
   8. Lua API ............................. |loupe-api|
+  9. Highlights .......................... |loupe-highlights|
 
 ==============================================================================
 1. INTRODUCTION                                          *loupe-introduction*
@@ -81,9 +82,15 @@ new keystroke stops the running search before starting the next.
 `files` and `dirs` are cached per root: reopening the picker shows the last
 list immediately while a fresh enumeration replaces it in the background.
 
-The title bar reads `Loupe · <source> · <count> [· <root>]`, where `<count>`
-is `shown/total` for list sources and `<root>` appears when browsing away
-from the project root (`<BS>` on an empty query goes up, `<C-r>` returns).
+The drawer is laid out as a fixed viewport: the prompt on the first row, one
+match per row after it, and a hint bar on the last row listing what the next
+keypress does. The window bar holds the source tabs (the active one
+highlighted) and, when browsing away from the project root, that root on the
+right (`<BS>` on an empty query goes up, `<C-r>` returns).
+
+The prompt shows the source glyph, the source name while the query is empty,
+and the count on the right: `shown/total` for list sources, `found` for live
+ones.
 
 ==============================================================================
 5. CONFIGURATION                                         *loupe-configuration*
@@ -151,5 +158,37 @@ loupe.open({opts})          Open. `opts.source` selects the initial source.
 loupe.close()               Close.
 loupe.toggle({opts})        Toggle.
 loupe.is_active()           Whether the picker is open.
+
+==============================================================================
+9. HIGHLIGHTS                                             *loupe-highlights*
+
+Every group is defined with `default = true` and linked to a standard group,
+so a colourscheme applies without configuration. Override any of them:
+
+>lua
+    vim.api.nvim_set_hl(0, "LoupeSelection", { link = "CursorLine" })
+<
+
+  LoupeSelection      Visual              the selected row
+  LoupeMatch          Search              matched characters
+  LoupeDir            Comment             a path's parent directory
+  LoupeMeta           LineNr              the right-hand metadata column
+  LoupeMetaFlag       DiagnosticWarn      the modified-buffer marker
+  LoupeTab            Comment             an inactive source tab
+  LoupeTabActive      Title               the active source tab
+  LoupePrompt         Title               the prompt prefix
+  LoupePromptCaret    LoupePrompt         the caret
+  LoupeGhost          Comment             the source name on an empty query
+  LoupeCount          LineNr              the result count
+  LoupeKey            Special             a key in the hint bar
+  LoupeHint           Comment             its label
+  LoupeEmpty          Comment             the "no matches" line
+  LoupeMark           DiagnosticInfo      the <Tab> mark
+  LoupeBorder         FloatBorder         the window bar
+  LoupeGitAdd         DiagnosticOk        git: added
+  LoupeGitMod         DiagnosticWarn      git: modified
+  LoupeGitDel         DiagnosticError     git: deleted or conflicted
+  LoupeGitNew         DiagnosticHint      git: untracked
+  LoupeGitRename      DiagnosticInfo      git: renamed or copied
 
 vim:tw=78:ts=8:ft=help:norl:

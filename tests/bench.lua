@@ -116,27 +116,40 @@ vim.fn.getchar = function(expr)
 	return 0
 end
 
---- The drawer's list buffer (winbar contains "Loupe").
-local function drawer_lines()
+--- The drawer's list buffer (winbar contains a source tab).
+local function drawer_buf()
 	for _, w in ipairs(vim.api.nvim_list_wins()) do
 		if (vim.wo[w].winbar or ""):find("Loupe", 1, true) then
-			return vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(w), 0, -1, false), vim.wo[w].winbar
+			return vim.api.nvim_win_get_buf(w)
 		end
 	end
-	return {}, ""
+end
+
+--- The count the picker shows, read from the prompt row's virtual text
+--- ("12/20022", "200+ …"). The list is a fixed-size viewport now, so its line
+--- count says nothing about how many matches there are.
+local function count_text()
+	local buf = drawer_buf()
+	if not buf then
+		return nil
+	end
+	local ns = vim.api.nvim_create_namespace("loupe_matches")
+	for _, m in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, 0, { details = true })) do
+		local chunks = m[4].virt_text
+		if chunks and m[4].virt_text_pos == "right_align" then
+			return vim.trim(chunks[1][1])
+		end
+	end
 end
 
 local function loaded()
-	local lines = drawer_lines()
-	return lines[2] ~= nil and lines[2] ~= "  (loading…)"
+	local text = count_text()
+	return text ~= nil and text ~= "…"
 end
 
 local function match_count()
-	local lines = drawer_lines()
-	if #lines < 2 or lines[2] == "  (loading…)" or lines[2] == "  (no matches)" then
-		return 0
-	end
-	return #lines - 1
+	local text = count_text() or ""
+	return tonumber(text:match("^(%d+)")) or 0
 end
 
 local function wait_until(cond, timeout)

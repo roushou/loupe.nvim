@@ -67,10 +67,11 @@ vim.keymap.set("n", "<leader>ss", function() require("loupe").open({ source = "d
 
 `:Loupe [source]` opens a specific source (`:Loupe grep`, `:Loupe symbols`, …).
 
-The title bar shows `shown/total` for list sources and `found` for live ones;
-`+` means the search stopped at `max_results`, `…` that it is still running.
-Reopening renders the last file list at once and refreshes it in the
-background.
+The window bar carries the source tabs, the prompt row the source glyph and
+the count (`shown/total` for list sources, `found` for live ones — `+` means
+the search stopped at `max_results`, `…` that it is still running), and the
+bottom row shows what the next keypress can do. Reopening renders the last
+file list at once and refreshes it in the background.
 
 ## API
 
@@ -100,6 +101,29 @@ require("loupe").setup({
 
 See `:help loupe-configuration` for the full option set. Every keybinding is
 data — set a value to `false` to unbind.
+
+## Appearance
+
+Every colour is a highlight group linked to a standard one, so themes apply
+without configuration. Override any of them to taste:
+
+```lua
+vim.api.nvim_set_hl(0, "LoupeSelection", { link = "CursorLine" })
+```
+
+| Group | Default | Used for |
+| --- | --- | --- |
+| `LoupeSelection` | `Visual` | the selected row |
+| `LoupeMatch` | `Search` | matched characters |
+| `LoupeDir` | `Comment` | the parent directory of a path |
+| `LoupeMeta` | `LineNr` | the right-hand metadata column |
+| `LoupeMetaFlag` | `DiagnosticWarn` | the modified-buffer marker |
+| `LoupeTab` / `LoupeTabActive` | `Comment` / `Title` | source tabs |
+| `LoupePrompt` / `LoupePromptCaret` | `Title` | prompt prefix and caret |
+| `LoupeGhost` | `Comment` | the source name on an empty query |
+| `LoupeCount` | `LineNr` | the result count |
+| `LoupeKey` / `LoupeHint` | `Special` / `Comment` | the hint bar |
+| `LoupeGit*` | diagnostic colours | git status markers |
 
 ## Dependencies
 

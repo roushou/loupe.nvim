@@ -6,6 +6,6 @@
 return {
 	name = "changed",
 	label = "Changed",
-	icon = "",
+	icon = "󰊢",
 	backend = { "git" },
 }

@@ -11,11 +11,13 @@
 
 local backend = require("loupe.backend")
 
-local M = { registry = {} }
+local M = { registry = {}, order = {} }
 
---- Register a source definition.
+--- Register a source definition. Registration order is the order the tab
+--- strip shows them in.
 function M.register(src)
 	M.registry[src.name] = src
+	M.order[#M.order + 1] = src
 	return src
 end
 

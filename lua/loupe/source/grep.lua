@@ -7,7 +7,7 @@
 return {
 	name = "grep",
 	label = "Grep",
-	icon = "",
+	icon = "󰍉",
 	backend = { "rg", "git" },
 	search = "grep",
 }

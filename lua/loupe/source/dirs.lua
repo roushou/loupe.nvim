@@ -8,7 +8,8 @@ local backend = require("loupe.backend")
 return {
 	name = "dirs",
 	label = "Directories",
-	icon = "",
+	tab = "Dirs",
+	icon = "󰉋",
 	cache = true,
 	list = function(ctx, cb)
 		backend.list(ctx, "dirs", function(cands)

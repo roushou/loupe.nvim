@@ -6,6 +6,6 @@
 return {
 	name = "recent",
 	label = "Recent",
-	icon = "",
+	icon = "󰋚",
 	backend = { "internal" },
 }

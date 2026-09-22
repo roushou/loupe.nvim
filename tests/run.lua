@@ -18,6 +18,7 @@ for _, spec in ipairs({
 	"tests.spec_loupe_file",
 	"tests.spec_loupe_cache",
 	"tests.spec_loupe_drawer",
+	"tests.spec_loupe_display",
 }) do
 	require(spec)
 end
