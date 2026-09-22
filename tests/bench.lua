@@ -95,7 +95,11 @@ end
 
 -- Scripted key reader: strings are delivered as keys, functions run in between.
 -- An empty queue delivers <Esc> so the session always closes.
-vim.fn.getcharstr = function()
+--
+-- `input.read` is the seam, not `getcharstr`: the picker reads keys through a
+-- Vimscript wrapper so CTRL-C cannot abort its loop, and stubbing the wrong
+-- one leaves the bench waiting on a real keypress that never comes.
+require("loupe.input").read = function()
 	while true do
 		local item = table.remove(queue, 1)
 		if item == nil then
