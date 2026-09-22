@@ -8,6 +8,7 @@ local hl = require("loupe.util.hl")
 local buf = require("loupe.util.buf")
 local win = require("loupe.util.win")
 local icons = require("loupe.icons")
+local parse = require("loupe.backend.parse")
 
 local M = {}
 
@@ -147,6 +148,31 @@ local function build(session, cfg)
 	return lines, meta, head_hl, caret_start
 end
 
+--- Title segments: source, `shown/total` (static) or `found[+]` (dynamic,
+--- with `…` while still streaming) and the root when browsing away from the
+--- project root.
+function M.title(session)
+	local parts = { "Loupe", (session.source and session.source.label) or "" }
+	local shown, total = #session.matches, #(session.candidates or {})
+	local count
+	if session.source and session.source.search then
+		count = tostring(total) .. (session.truncated and "+" or "") .. (session.searching and " …" or "")
+	elseif not session.loaded then
+		count = "…"
+	elseif total > shown then
+		count = shown .. "/" .. total
+	else
+		count = tostring(shown)
+	end
+	parts[#parts + 1] = count
+	if session.root and session.project_root and session.root ~= session.project_root then
+		local rel = parse.relpath(session.project_root, session.root)
+		local inside = session.root:sub(1, #session.project_root + 1) == session.project_root .. "/"
+		parts[#parts + 1] = inside and (rel .. "/") or vim.fn.fnamemodify(session.root, ":~")
+	end
+	return parts
+end
+
 --- Redraw prompt, matches and selection.
 function M.render(session, cfg)
 	local buf = session.list_buf
@@ -186,8 +212,7 @@ function M.render(session, cfg)
 
 	local win = session.drawer_win
 	if win and vim.api.nvim_win_is_valid(win) then
-		local name = (session.source and session.source.label) or ""
-		local title = " Loupe · " .. name .. " · " .. #session.matches .. " "
+		local title = " " .. table.concat(M.title(session), " · ") .. " "
 		local pad = math.max(0, vim.api.nvim_win_get_width(win) - vim.fn.strchars(title) - 1)
 		vim.wo[win].winbar = "─" .. title .. string.rep("─", pad)
 	end

@@ -67,6 +67,8 @@ vim.keymap.set("n", "<leader>ss", function() require("loupe").open({ source = "d
 
 `:Loupe [source]` opens a specific source (`:Loupe grep`, `:Loupe symbols`, …).
 
+The title bar shows `shown/total` for list sources and `found` for live ones;
+`+` means the search stopped at `max_results`, `…` that it is still running.
 Reopening renders the last file list at once and refreshes it in the
 background.
 
