@@ -48,6 +48,8 @@ M.defaults = {
 		enabled = true,
 		--- Read at most this many lines into the preview buffer.
 		max_lines = 2000,
+		--- ... and at most this many bytes, so one enormous line stays cheap.
+		max_bytes = 1048576,
 		--- Re-emit the previewed file's diagnostics (undercurls, signs, and an
 		--- end-of-line message) on the preview scratch buffer.
 		diagnostics = true,

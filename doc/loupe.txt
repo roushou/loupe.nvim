@@ -96,7 +96,7 @@ full set.
       root = function() ... end,
       backend = "ripgrep",          -- matcher engine: "ripgrep" | "fff"
       backends = { files = { "fd", "rg", "git" }, grep = { "rg", "git" } },
-      preview = { enabled = true, max_lines = 2000, diagnostics = true },
+      preview = { enabled = true, max_lines = 2000, max_bytes = 1048576, diagnostics = true },
       icons = true,
       git = true,
       frecency = true,
@@ -106,6 +106,9 @@ full set.
       mappings = { browse = { ... }, menu = { ... }, sources = { ... }, prompt = { ... } },
     })
 <
+
+`preview.max_lines` and `preview.max_bytes` bound what is read into the
+preview, so a file with one enormous line costs no more than a normal one.
 
 Mappings are grouped by context: `browse` (result list), `menu` (the `<C-x>`
 action submenu), `sources` (the `<C-o>` source menu) and `prompt` (inline text

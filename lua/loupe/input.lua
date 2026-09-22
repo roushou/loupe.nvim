@@ -171,6 +171,13 @@ local function handle_browse(ctx, map, ch, key)
 	return false
 end
 
+--- Whether keys are waiting in the typeahead (a held or repeated key). The
+--- session skips redraws while this holds: only the last queued key needs to
+--- paint.
+function M.pending()
+	return vim.fn.getchar(1) ~= 0
+end
+
 --- Run the blocking key loop until the picker closes.
 function M.run(ctx)
 	local maps = keymap.resolve(config.get().mappings)

@@ -120,6 +120,7 @@ local function update_preview()
 		preview.ensure_open(S.drawer_win, S.preview_opts)
 		preview.show(item.cand.abs, {
 			max_lines = cfg.preview.max_lines,
+			max_bytes = cfg.preview.max_bytes,
 			diagnostics = cfg.preview.diagnostics,
 			lnum = item.cand.lnum,
 			col = item.cand.col,
@@ -131,6 +132,11 @@ local function update_preview()
 end
 
 local function render()
+	-- More keys are already waiting (held or repeated key): the last of them
+	-- redraws, so painting now would only be overwritten unseen.
+	if input.pending() then
+		return
+	end
 	-- Update the preview *before* the list redraws, otherwise the redraw paints
 	-- the stale preview and it only catches up on the next keypress.
 	update_preview()

@@ -18,23 +18,55 @@ function M.is_text(path)
 	return not data:find("\0")
 end
 
---- Read at most `max_lines` lines from `path` (all when nil).
---- Returns `lines, err, truncated`; `err` is nil on success.
-function M.read(path, max_lines)
-	local ok, res
-	if max_lines then
-		ok, res = pcall(vim.fn.readfile, path, "", max_lines + 1)
-	else
-		ok, res = pcall(vim.fn.readfile, path, "")
+--- Read at most `max_lines` lines and `max_bytes` bytes from `path` (either
+--- may be nil for no bound). A single bounded `uv` read keeps a file with one
+--- enormous line as cheap as a normal one.
+---
+--- Returns `lines, err, truncated`; `err` is "binary" when the head of the
+--- file contains a NUL byte, or the open error. CR of CRLF endings is dropped.
+function M.read(path, max_lines, max_bytes)
+	local fd, err = vim.uv.fs_open(path, "r", 438)
+	if not fd then
+		return nil, err or "cannot open", false
 	end
-	if not ok then
-		return nil, res, false
+	local stat = vim.uv.fs_fstat(fd)
+	local size = stat and stat.size or 0
+	local want = size
+	if max_bytes and max_bytes + 1 < want then
+		want = max_bytes + 1
 	end
-	local truncated = max_lines ~= nil and #res > max_lines
-	if truncated then
-		res = vim.list_slice(res, 1, max_lines)
+	local data = want > 0 and vim.uv.fs_read(fd, want, 0) or ""
+	vim.uv.fs_close(fd)
+	data = data or ""
+	if data:sub(1, 1024):find("\0", 1, true) then
+		return nil, "binary", false
 	end
-	return res, nil, truncated
+
+	local truncated = false
+	if max_bytes and #data > max_bytes then
+		-- keep whole lines only (drop the cut-off tail); a file that is one
+		-- giant line keeps a short head
+		local last = max_bytes
+		while last > 0 and data:byte(last) ~= 10 do
+			last = last - 1
+		end
+		data = last > 0 and data:sub(1, last) or data:sub(1, 4096)
+		truncated = true
+	end
+	local lines = vim.split(data, "\n", { plain = true })
+	if lines[#lines] == "" then
+		lines[#lines] = nil
+	end
+	for i, line in ipairs(lines) do
+		if line:sub(-1) == "\r" then
+			lines[i] = line:sub(1, -2)
+		end
+	end
+	if max_lines and #lines > max_lines then
+		lines = vim.list_slice(lines, 1, max_lines)
+		truncated = true
+	end
+	return lines, nil, truncated
 end
 
 --- Whether a buffer is small enough to highlight (total and per-line bounds).

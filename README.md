@@ -86,7 +86,7 @@ require("loupe").setup({
   trash = true,          -- delete via the OS trash when available
   frecency = true,       -- order the empty-query list by use
   git = true,            -- show git status markers
-  preview = { diagnostics = true },
+  preview = { diagnostics = true, max_lines = 2000, max_bytes = 1048576 },
   backends = { files = { "fd", "rg", "git" }, grep = { "rg", "git" } },
   mappings = {
     browse = { ["<CR>"] = "split" },

@@ -257,6 +257,7 @@ function M.resize(drawer_win)
 end
 
 --- Render `path` into the preview buffer, jumping to `opts.lnum`/`opts.col`.
+--- Reads at most `opts.max_lines` lines and `opts.max_bytes` bytes.
 function M.show(path, opts)
 	opts = opts or {}
 	if not (P.buf and vim.api.nvim_buf_is_valid(P.buf)) then
@@ -280,18 +281,11 @@ function M.show(path, opts)
 	end
 	P.path = path
 	local max_lines = opts.max_lines or 2000
+	local max_bytes = opts.max_bytes or 1048576
 
-	if file.is_text(path) == false then
-		set_lines({ "-binary file-" })
-		position(1, 0)
-		highlight(nil)
-		clear_diagnostics()
-		return
-	end
-
-	local lines, _, truncated = file.read(path, max_lines)
+	local lines, err, truncated = file.read(path, max_lines, max_bytes)
 	if not lines then
-		set_lines({ "-cannot read file-" })
+		set_lines({ err == "binary" and "-binary file-" or "-cannot read file-" })
 		position(1, 0)
 		highlight(nil)
 		clear_diagnostics()
@@ -299,7 +293,8 @@ function M.show(path, opts)
 	end
 	if truncated then
 		lines[#lines + 1] = ""
-		lines[#lines + 1] = ("-- truncated at %d lines --"):format(max_lines)
+		lines[#lines + 1] = #lines > max_lines and ("-- truncated at %d lines --"):format(max_lines)
+			or ("-- truncated at %d KB --"):format(math.floor(max_bytes / 1024))
 	end
 
 	set_lines(lines)
