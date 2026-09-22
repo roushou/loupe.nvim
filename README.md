@@ -116,6 +116,13 @@ Pure headless tests (no plugins required):
 nvim --headless -u tests/minimal_init.lua -l tests/run.lua
 ```
 
+End-to-end benchmark (generates a 20k-file fixture on first run, drives the
+real picker through a scripted key queue and prints a timing table):
+
+```sh
+nvim --headless -u tests/minimal_init.lua -l tests/bench.lua
+```
+
 ## License
 
 [MIT](./LICENSE)
