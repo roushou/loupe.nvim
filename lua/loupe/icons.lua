@@ -55,20 +55,24 @@ local BY_NAME = {
 	[".gitignore"] = BY_FILETYPE.gitignore,
 }
 
+-- rel path -> { glyph, hl }. Filetype detection is the costly part of a
+-- redraw (200 rows × vim.filetype.match), and a path's icon never changes.
+local memo = {}
+
 --- Return (glyph, hl_group) for a candidate { rel, dir }.
 function M.get(cand)
 	if cand.dir then
 		return DIR.glyph, DIR.hl
 	end
-	local special = BY_NAME[vim.fn.fnamemodify(cand.rel, ":t")]
-	if special then
-		return special.glyph, special.hl
+	local hit = memo[cand.rel]
+	if hit then
+		return hit.glyph, hit.hl
 	end
-	local data = BY_FILETYPE[vim.filetype.match({ filename = cand.rel })]
-	if data then
-		return data.glyph, data.hl
-	end
-	return FILE.glyph, FILE.hl
+	local data = BY_NAME[vim.fn.fnamemodify(cand.rel, ":t")]
+		or BY_FILETYPE[vim.filetype.match({ filename = cand.rel })]
+		or FILE
+	memo[cand.rel] = data
+	return data.glyph, data.hl
 end
 
 --- Resolve a candidate's glyph, preferring an explicit `cand.icon`.
