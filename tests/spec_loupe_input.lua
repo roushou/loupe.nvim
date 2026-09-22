@@ -109,3 +109,51 @@ h.test("the source keys step along the tab strip", function()
 	h.eq(seen[3], "Buffers")
 	h.eq(seen[4], "Dirs", "<C-Left> did not step back")
 end)
+
+-- The picker opens over whatever the user was reading. Selecting a match on
+-- its own would throw the preview across that buffer, so the freshly opened
+-- picker rests with nothing selected until the user points it somewhere.
+--
+-- Driven through a source that hands back its candidates on the spot: the
+-- real enumerations are asynchronous, and a stubbed key reader never yields
+-- long enough for one to land.
+
+local parse = require("loupe.backend.parse")
+local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h:h")
+
+require("loupe.source").register({
+	name = "_resting",
+	label = "Resting",
+	list = function(_, cb)
+		cb({ parse.candidate(root, "README.md"), parse.candidate(root, "doc/loupe.txt") }, true)
+	end,
+})
+
+--- Open the picker on that source, feeding `keys`, and report whether the
+--- preview was on screen before each key was read.
+local function preview_at(keys)
+	local real = vim.fn.LoupeGetChar
+	local preview = require("loupe.preview")
+	local at, seen = 0, {}
+	vim.fn.LoupeGetChar = function()
+		seen[#seen + 1] = preview.is_open()
+		at = at + 1
+		return keys[at] or vim.keycode("<Esc>")
+	end
+	local ok, err = pcall(session.open, { source = "_resting" })
+	vim.fn.LoupeGetChar = real
+	h.ok(ok, tostring(err))
+	return seen
+end
+
+h.test("opening the picker previews nothing until the selection is aimed", function()
+	local seen = preview_at({ vim.keycode("<C-N>") })
+	h.eq(seen[1], false, "the picker previewed a match nobody asked for")
+	h.eq(seen[2], true, "<C-N> did not open the preview")
+end)
+
+h.test("typing a query aims the selection", function()
+	local seen = preview_at({ "r" })
+	h.eq(seen[1], false)
+	h.eq(seen[2], true, "a typed query left the picker resting")
+end)

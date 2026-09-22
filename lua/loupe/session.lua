@@ -45,13 +45,17 @@ local function page()
 	return 10
 end
 
---- Keep the selection valid: select the first match once results exist.
+--- Keep the selection valid, and select the first match once results exist
+--- -- but only once the user has aimed at something. A freshly opened picker
+--- rests on `index = 0`: selecting on its own would open the preview over the
+--- buffer the user was reading, replacing what is on screen with something
+--- they never asked to see.
 local function normalize_index()
 	local n = #S.matches
 	if n == 0 then
 		S.index = 0
 	elseif S.index < 1 then
-		S.index = 1
+		S.index = S.aimed and 1 or 0
 	elseif S.index > n then
 		S.index = n
 	end
@@ -101,6 +105,7 @@ end
 
 --- Move the selection onto the match with relative path `rel`, if present.
 local function focus(rel)
+	S.aimed = true
 	S.index = 1
 	for i, m in ipairs(S.matches) do
 		if m.cand.rel == rel then
@@ -185,6 +190,7 @@ local function move(delta)
 	if n == 0 then
 		return
 	end
+	S.aimed = true
 	if S.index == 0 then
 		S.index = delta > 0 and 1 or n
 		return
@@ -196,6 +202,8 @@ end
 local function set_query(text, caret)
 	S.query = text
 	S.caret = caret or tf.len(text)
+	-- typing is the ask: from here the picker may point at its own best guess
+	S.aimed = true
 	S.index = 1
 	refresh()
 end
@@ -305,7 +313,9 @@ function reload()
 	if cached then
 		S.candidates = (cfg.frecency and src.name == "files") and frecency.promote(cached) or cached
 		S.loaded = true
-		S.index = 1
+		-- back to the top for the new source, or back to rest if the picker
+		-- has not been aimed yet
+		S.index = S.aimed and 1 or 0
 		refresh()
 	else
 		S.loaded = false
@@ -545,6 +555,7 @@ local function mouse_select()
 	if idx < 1 or idx > #S.matches then
 		return false
 	end
+	S.aimed = true
 	S.index = idx
 	return true
 end
@@ -579,6 +590,10 @@ function M.open(opts)
 		caret = 0,
 		matches = {},
 		index = 0,
+		-- whether the user has pointed the selection anywhere yet (moved,
+		-- typed, clicked); until then nothing is selected and the preview
+		-- stays shut, so opening the picker leaves the view alone
+		aimed = false,
 		-- first match drawn (the drawer keeps this in step with `index`)
 		top = 1,
 		sources = source.order,

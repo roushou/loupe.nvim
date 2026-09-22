@@ -5,7 +5,9 @@ A bottom-docked fuzzy finder for Neovim with a full-viewport live preview.
 Loupe is **source-based**: the source menu changes *what* is searched, while
 matching, previewing and actions stay the same. Browsing never opens a file
 buffer — files are read into a scratch buffer, and only the choose actions
-create real buffers.
+create real buffers. A freshly opened picker selects nothing, so the view
+behind it is left alone until you move the selection, type a query or click a
+row.
 
 ```
 f files · d dirs · b buffers · r recent · c changed · g grep · s symbols · t doc_symbols · e diagnostics

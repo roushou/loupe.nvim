@@ -23,6 +23,10 @@ previewing and actions stay the same.
 Browsing never opens a file buffer — files are read into a scratch buffer, and
 only the choose actions create real buffers.
 
+A freshly opened picker selects nothing, so the view behind it is left alone:
+the preview appears once you move the selection, type a query or click a row.
+Until then there is no selected row, and the choose actions do nothing.
+
 Requires Neovim 0.11+ and the external tools `fd`, `rg` and `git` (each
 optional; Loupe degrades gracefully). A Nerd Font is needed for the icons.
 
