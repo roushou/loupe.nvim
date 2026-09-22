@@ -150,6 +150,11 @@ real picker through a scripted key queue and prints a timing table):
 nvim --headless -u tests/minimal_init.lua -l tests/bench.lua
 ```
 
+Every scenario states what its probes must see, and the run ends in
+`BENCH PASS` or `BENCH FAIL`. Add `--smoke` for the same scenarios over a
+small fixture — that is what CI runs, to catch the harness rotting rather
+than to measure anything.
+
 ## License
 
 [MIT](./LICENSE)

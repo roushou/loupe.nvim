@@ -1,5 +1,6 @@
 --- Headless end-to-end benchmark.
 ---   nvim --headless -u tests/minimal_init.lua -l tests/bench.lua
+---   nvim --headless -u tests/minimal_init.lua -l tests/bench.lua --smoke
 ---
 --- Drives the real session (open → type → move → grep) by replacing the key
 --- reader with a scripted queue, so every layer from enumeration to preview
@@ -7,22 +8,35 @@
 --- back are delivered with typeahead pending, like a held key; a function in
 --- the queue runs between keys (waits, timers).
 ---
+--- Every scenario states what its probes must see — keys were read, a list was
+--- drawn, matches were found — and the run fails when one does not hold. A
+--- harness that reaches this far into a moving target does not fail by
+--- stopping; it fails by measuring the wrong thing and printing a number that
+--- looks like an improvement. `--smoke` runs the same scenarios over a small
+--- fixture to keep those checks honest in CI, where the timings mean nothing.
+---
 --- Fixture: a synthetic repo under $LOUPE_BENCH_DIR (default: stdpath cache),
 --- generated once. Set LOUPE_BENCH_OUT to also write the results as JSON.
 
 vim.notify = function() end
 
-local N_FILES = tonumber(os.getenv("LOUPE_BENCH_FILES")) or 20000
-local N_BIG = 20
-local BIG_LINES = 5000
-local HUGE_BYTES = 20 * 1024 * 1024
-local ROOT = os.getenv("LOUPE_BENCH_DIR") or (vim.fn.stdpath("cache") .. "/loupe-bench")
+local SMOKE = (os.getenv("LOUPE_BENCH_SMOKE") == "1") or vim.tbl_contains(_G.arg or {}, "--smoke")
+
+local N_FILES = tonumber(os.getenv("LOUPE_BENCH_FILES")) or (SMOKE and 300 or 20000)
+local N_BIG = SMOKE and 2 or 20
+local BIG_LINES = SMOKE and 500 or 5000
+local HUGE_BYTES = (SMOKE and 2 or 20) * 1024 * 1024
+local ROOT = os.getenv("LOUPE_BENCH_DIR")
+	or (vim.fn.stdpath("cache") .. (SMOKE and "/loupe-bench-smoke" or "/loupe-bench"))
+-- the marker carries the size, so a smoke fixture is never mistaken for a full
+-- one left in the same directory
+local READY = ("/.loupe-bench-ready-%d"):format(N_FILES)
 
 -- ---------------------------------------------------------------------------
 -- fixture
 
 local function generate()
-	if vim.uv.fs_stat(ROOT .. "/.loupe-bench-ready") then
+	if vim.uv.fs_stat(ROOT .. READY) then
 		return
 	end
 	io.write(("generating fixture: %d files under %s\n"):format(N_FILES, ROOT))
@@ -57,7 +71,7 @@ local function generate()
 	vim.fn.system({ "git", "-C", ROOT, "init", "-q" })
 	vim.fn.system({ "git", "-C", ROOT, "add", "-A" })
 	vim.fn.system({ "git", "-C", ROOT, "-c", "user.email=b@b", "-c", "user.name=b", "commit", "-qm", "fixture" })
-	vim.fn.writefile({}, ROOT .. "/.loupe-bench-ready")
+	vim.fn.writefile({}, ROOT .. READY)
 end
 
 -- ---------------------------------------------------------------------------
@@ -86,6 +100,30 @@ local function now()
 	return vim.uv.hrtime() / 1e6
 end
 
+-- What the run has to be able to say about itself. A probe that reads the
+-- wrong thing is the failure mode that matters here, so every scenario states
+-- what it must have seen and the run exits non-zero when it did not.
+local failures = {}
+local function check(cond, msg)
+	if not cond then
+		failures[#failures + 1] = msg
+	end
+	return cond
+end
+
+--- Record a failure and stop the run: once the picker is not on screen, every
+--- later scenario would wait out its timeout to say the same thing.
+local function fatal(msg)
+	failures[#failures + 1] = msg
+	error("bench: " .. msg, 0)
+end
+
+-- No scenario may outlive this. A probe that reads the wrong thing waits out
+-- every timeout it meets, which turns a broken harness into a hung one.
+local DEADLINE_MS = SMOKE and 60000 or 600000
+local started
+
+local reads = 0
 local queue = {}
 local ESC = "\27"
 
@@ -100,6 +138,7 @@ end
 -- Vimscript wrapper so CTRL-C cannot abort its loop, and stubbing the wrong
 -- one leaves the bench waiting on a real keypress that never comes.
 require("loupe.input").read = function()
+	reads = reads + 1
 	while true do
 		local item = table.remove(queue, 1)
 		if item == nil then
@@ -157,7 +196,29 @@ local function match_count()
 end
 
 local function wait_until(cond, timeout)
-	vim.wait(timeout or 30000, cond, 2)
+	vim.wait(timeout or (SMOKE and 5000 or 30000), cond, 2)
+	if started and now() - started > DEADLINE_MS then
+		fatal(
+			("the run passed its %ds deadline: something is waiting on a condition that will not come"):format(
+				DEADLINE_MS / 1000
+			)
+		)
+	end
+	return cond()
+end
+
+--- Assert the picker is on screen and showing something, for a scenario whose
+--- timing means nothing otherwise.
+local function check_showing(name, want_matches)
+	if drawer_buf() == nil then
+		fatal(name .. ": the drawer was never found — the probe is reading the wrong window")
+	end
+	if count_text() == nil then
+		fatal(name .. ": the picker drew no count — the probe is reading the wrong extmark")
+	end
+	if want_matches then
+		check(match_count() > 0, name .. ": no matches, so nothing was measured")
+	end
 end
 
 local function idle(exe)
@@ -225,8 +286,9 @@ local function run()
 	local t0 = now()
 	open_session({
 		function()
-			wait_until(loaded)
+			check(wait_until(loaded), "cold open: the list never loaded")
 			record("open (cold) → list rendered", now() - t0)
+			check_showing("cold open", true)
 			wait_until(function()
 				return idle("fd") and idle("git")
 			end)
@@ -238,8 +300,9 @@ local function run()
 	t0 = now()
 	open_session({
 		function()
-			wait_until(loaded)
+			check(wait_until(loaded), "warm reopen: the list never loaded")
 			record("reopen (warm) → list rendered", now() - t0)
+			check_showing("warm reopen", true)
 			wait_until(function()
 				return idle("fd") and idle("git")
 			end)
@@ -263,6 +326,7 @@ local function run()
 		"0",
 		function()
 			record("type 'big_0' (5 keys queued) → settled", now() - t0, { matches = match_count() })
+			check_showing("typed query", true)
 		end,
 	})
 
@@ -284,6 +348,10 @@ local function run()
 		repeat_keys("<C-n>", 100),
 		function()
 			record("hold <C-n> ×100 over 5000-line files → settled", now() - t0)
+			check_showing("held movement", true)
+			-- a viewport that never moved would make this scenario free and
+			-- meaningless
+			check(require("loupe.preview").is_open(), "held movement: nothing was previewed")
 		end,
 	}))
 
@@ -302,8 +370,15 @@ local function run()
 		"e",
 		function()
 			record("preview 20MB single-line file", now() - t0)
+			check_showing("huge preview", true)
+			check(require("loupe.preview").is_open(), "huge preview: the preview never opened")
 		end,
 	})
+
+	if vim.fn.executable("rg") == 0 then
+		io.write("skipping the grep scenarios: rg is not on PATH\n")
+		return
+	end
 
 	-- F: grep, query typed instantly → first results / all results
 	reset_procs()
@@ -322,9 +397,12 @@ local function run()
 		end,
 		chars("function"),
 		function()
-			wait_until(function()
-				return match_count() > 0
-			end)
+			check(
+				wait_until(function()
+					return match_count() > 0
+				end),
+				"grep: no matches arrived"
+			)
 			t_first = now() - t0
 			wait_until(function()
 				return idle("rg")
@@ -332,6 +410,7 @@ local function run()
 			vim.wait(50)
 			record("grep 'function' (queued) → first results", t_first, { matches = match_count() })
 			record("grep 'function' (queued) → rg finished", now() - t0, { rg_spawned = procs.spawned.rg })
+			check((procs.spawned.rg or 0) > 0, "grep: rg was never spawned")
 		end,
 	}))
 
@@ -359,10 +438,14 @@ local function run()
 				rg_spawned = procs.spawned.rg,
 				rg_peak_concurrent = procs.peak.rg,
 			})
+			check_showing("typed grep", true)
+			check((procs.spawned.rg or 0) > 1, "typed grep: rg ran once, so nothing was superseded")
 		end,
 	}))
+end
 
-	-- report
+--- Print the timings, then whatever the run could not vouch for.
+local function report()
 	io.write("\n| scenario | ms | notes |\n|---|---:|---|\n")
 	for _, r in ipairs(results) do
 		local notes = {}
@@ -372,16 +455,36 @@ local function run()
 		table.sort(notes)
 		io.write(("| %s | %.1f | %s |\n"):format(r.name, r.ms, table.concat(notes, " ")))
 	end
+	if SMOKE then
+		io.write("\nsmoke run: the timings above are from a tiny fixture and mean nothing\n")
+	end
 	local out = os.getenv("LOUPE_BENCH_OUT")
 	if out then
 		vim.fn.writefile({ vim.json.encode(results) }, out)
 	end
+
+	check(reads > 0, "the scripted reader was never called: the picker reads keys elsewhere now")
+	check(#results > 0, "no scenario recorded a timing")
+	if #failures == 0 then
+		-- the line a caller greps for: a silent abort exits 0 and prints
+		-- nothing, so absence of this is the only reliable failure signal
+		io.write(("\nBENCH PASS — %d scenarios, probes checked out\n"):format(#results))
+		return true
+	end
+	io.write(("\nBENCH FAIL — %d probe failure(s), the numbers above are not trustworthy:\n"):format(#failures))
+	for _, msg in ipairs(failures) do
+		io.write("  - " .. msg .. "\n")
+	end
+	return false
 end
 
 generate()
+started = now()
 local ok, err = pcall(run)
 if not ok then
 	io.write("bench error: " .. tostring(err) .. "\n")
+end
+if not (report() and ok) then
 	vim.cmd("cquit")
 end
 vim.cmd("qall!")

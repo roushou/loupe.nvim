@@ -36,3 +36,16 @@ jobs:
           neovim: true
       - name: Run headless tests
         run: nvim --headless -u tests/minimal_init.lua -l tests/run.lua
+
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
+      # The benchmark drives the picker through its own seams, so it rots
+      # whenever one moves. This runs its scenarios over a small fixture to
+      # keep the probes honest; the timings are ignored. A harness that breaks
+      # badly enough aborts Neovim without an error and exits 0, so the verdict
+      # line is what decides, not the exit status.
+      - name: Benchmark smoke run
+        run: |
+          nvim --headless -u tests/minimal_init.lua -l tests/bench.lua --smoke | tee bench.out
+          grep -q "BENCH PASS" bench.out
