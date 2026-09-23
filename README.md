@@ -1,5 +1,7 @@
 # loupe.nvim
 
+https://github.com/user-attachments/assets/a1fb2c76-1690-4f95-b0a9-f01a603c425a
+
 A bottom-docked fuzzy finder for Neovim with a full-viewport live preview.
 
 Loupe is **source-based**: the source menu changes *what* is searched, while
