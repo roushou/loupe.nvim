@@ -147,6 +147,11 @@ local function render()
 	-- the stale preview and it only catches up on the next keypress.
 	update_preview()
 	drawer.render(S, config.get())
+	-- A treesitter highlighter attached to the preview does not paint until
+	-- something redraws, and the loop is about to block on a key -- so without
+	-- this the syntax colours arrive only when the user happens to press
+	-- another key, which is why they seemed to come and go.
+	vim.cmd("redraw")
 end
 
 --- Fire the active dynamic source's search and apply the results.
