@@ -521,7 +521,7 @@ local function match_line(session, cfg, item, width, selected)
 
 	local mark = ""
 	if session.marked and next(session.marked) ~= nil then
-		mark = session.marked[cand.abs] and "● " or "  "
+		mark = session.marked[parse.identity(cand)] and "● " or "  "
 	end
 
 	local inner = math.max(1, width - PAD * 2)
@@ -559,7 +559,7 @@ local function match_line(session, cfg, item, width, selected)
 	end
 	local at = PAD
 	if mark ~= "" then
-		if session.marked[cand.abs] then
+		if session.marked[parse.identity(cand)] then
 			spans[#spans + 1] = { at, at + #mark, "LoupeMark" }
 		end
 		at = at + #mark

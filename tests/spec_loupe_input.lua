@@ -195,3 +195,49 @@ h.test("the chosen file is in the window before the chrome comes down", function
 		"the window still held " .. vim.fn.fnamemodify(seen, ":t") .. " when the picker started closing"
 	)
 end)
+
+-- Marks key on the candidate, not on its file: a location source puts many
+-- candidates in one file, and keying on the path alone collapses them.
+
+require("loupe.source").register({
+	name = "_hits",
+	label = "Hits",
+	list = function(_, cb)
+		local abs = root .. "/README.md"
+		cb({
+			{ rel = "README.md", abs = abs, text = "first", label = "first", lnum = 1, col = 0 },
+			{ rel = "README.md", abs = abs, text = "second", label = "second", lnum = 2, col = 0 },
+			{ rel = "README.md", abs = abs, text = "third", label = "third", lnum = 3, col = 0 },
+		}, true)
+	end,
+})
+
+--- Drive the picker over `_hits` with `keys`, then report the quickfix list.
+local function qflist_after(keys)
+	local real = vim.fn.LoupeGetChar
+	local at = 0
+	vim.fn.LoupeGetChar = function()
+		at = at + 1
+		return keys[at] or vim.keycode("<Esc>")
+	end
+	vim.fn.setqflist({}, "r")
+	local ok, err = pcall(session.open, { source = "_hits" })
+	vim.fn.LoupeGetChar = real
+	h.ok(ok, tostring(err))
+	return vim.fn.getqflist()
+end
+
+h.test("marking one hit does not mark its neighbours in the same file", function()
+	-- aim, mark the first hit, then send the marked set to the quickfix list
+	local qf = qflist_after({ vim.keycode("<C-N>"), vim.keycode("<Tab>"), vim.keycode("<C-X>"), "q" })
+	h.eq(#qf, 1, "one mark sent " .. #qf .. " locations: the mark keyed on the file, not the hit")
+	h.eq(qf[1].lnum, 1, "the wrong hit was sent")
+end)
+
+h.test("marking two hits in one file sends both", function()
+	-- <Tab> marks and steps down, so two in a row mark the first two hits
+	local qf =
+		qflist_after({ vim.keycode("<C-N>"), vim.keycode("<Tab>"), vim.keycode("<Tab>"), vim.keycode("<C-X>"), "q" })
+	h.eq(#qf, 2)
+	h.eq({ qf[1].lnum, qf[2].lnum }, { 1, 2 })
+end)

@@ -17,6 +17,7 @@ local frecency = require("loupe.frecency")
 local cache = require("loupe.cache")
 local git = require("loupe.git")
 local action = require("loupe.action")
+local parse = require("loupe.backend.parse")
 local tf = require("loupe.util.textfield")
 local debounce = require("loupe.util.debounce")
 local input = require("loupe.input")
@@ -388,7 +389,7 @@ local function toggle_mark()
 	if not item then
 		return
 	end
-	local key = item.cand.abs
+	local key = parse.identity(item.cand)
 	if S.marked[key] then
 		S.marked[key] = nil
 	else
@@ -424,7 +425,7 @@ end
 local function quickfix()
 	local items = {}
 	for _, c in ipairs(S.candidates) do
-		if S.marked[c.abs] then
+		if S.marked[parse.identity(c)] then
 			items[#items + 1] = c
 		end
 	end
