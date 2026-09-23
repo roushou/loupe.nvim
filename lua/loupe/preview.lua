@@ -299,9 +299,19 @@ function M.show(path, opts)
 
 	set_lines(lines)
 
+	-- Always called, even for a file too big to highlight: `file.highlight` is
+	-- what detaches the previous file's parser, and the buffer is reused, so
+	-- skipping the call leaves that parser attached to text it cannot match --
+	-- still parsing, at exactly the size the guard exists to avoid.
+	--
+	-- `buf` as well as `filename`: filename alone skips filetype detection's
+	-- content tier, so every extensionless script (a shebang, a git hook)
+	-- comes back nil and previews plain.
+	local ft = ""
 	if file.should_highlight(P.buf) then
-		file.highlight(P.buf, vim.filetype.match({ filename = path }) or "")
+		ft = vim.filetype.match({ filename = path, buf = P.buf }) or ""
 	end
+	file.highlight(P.buf, ft)
 	position(lnum, col)
 	highlight(opts.lnum, opts.col, opts.col_end)
 	if with_diag then

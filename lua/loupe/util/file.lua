@@ -1,8 +1,8 @@
 --- File reading + highlighting helpers for previews.
 ---
 --- Pure: built-in APIs only (|vim.uv|, |vim.fn.readfile()|, treesitter, native
---- syntax). Never sets 'filetype', so no |FileType| autocmds (LSP attach,
---- indentation, ...) fire on a preview buffer.
+--- syntax). Sets 'filetype' only with autocmds suppressed, so no |FileType|
+--- autocmd (LSP attach, indentation, ...) ever fires on a preview buffer.
 
 local M = {}
 
@@ -76,11 +76,30 @@ function M.should_highlight(buf)
 	return size <= 1000000 and size <= 1000 * n
 end
 
+--- Set 'filetype' without firing |FileType|.
+---
+--- The option has to be set: a treesitter highlighter started on a buffer
+--- with no filetype attaches -- `vim.treesitter.highlighter.active[buf]` is
+--- there -- and then paints nothing. The event is what must not fire, since
+--- a preview buffer is not a file the user opened: LSP clients, indent
+--- plugins and everything else hanging off |FileType| have no business
+--- attaching to it.
+local function quiet_filetype(buf, ft)
+	local saved = vim.o.eventignore
+	vim.o.eventignore = "all"
+	pcall(function()
+		vim.bo[buf].filetype = ft
+	end)
+	vim.o.eventignore = saved
+end
+
 --- Highlight `buf` as `ft`: treesitter when a parser exists, native syntax
---- otherwise. Stops any existing treesitter highlighter first.
+--- otherwise. Stops any existing treesitter highlighter first, so calling it
+--- with an empty `ft` is how a reused buffer is returned to plain text.
 function M.highlight(buf, ft)
 	pcall(vim.treesitter.stop, buf)
 	if not ft or ft == "" then
+		quiet_filetype(buf, "")
 		vim.bo[buf].syntax = ""
 		return
 	end
@@ -89,9 +108,11 @@ function M.highlight(buf, ft)
 	local has_parser, parser = pcall(vim.treesitter.get_parser, buf, lang, { error = false })
 	has_parser = has_parser and parser ~= nil
 	if has_parser then
+		quiet_filetype(buf, ft)
 		has_parser = pcall(vim.treesitter.start, buf, lang)
 	end
 	if not has_parser then
+		-- native syntax still needs its own event, which `:syntax` fires
 		vim.bo[buf].syntax = ft
 	end
 end
