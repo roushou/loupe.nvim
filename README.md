@@ -61,8 +61,6 @@ vim.keymap.set("n", "<leader>ss", function() require("loupe").open({ source = "d
 | `<C-s>` / `<C-v>` / `<C-t>` | Open in split / vsplit / tab |
 | `<C-o>` | Source menu — marks each tab with its key |
 | `<C-Right>` / `<C-Left>` | Next / previous source |
-| `<C-x>` | Action menu (`r` rename, `d` delete — closes the buffer in the `buffers` source, `a` add, `c` duplicate, `y`/`Y`/`n`/`D` yank path/relative/name/dir, `o` open externally, `q` quickfix) |
-| `<Tab>` | Mark (marks feed quickfix) |
 | `<C-r>` | Jump back to the project root |
 | `<BS>` | On an empty query, go up a directory |
 | `<C-p>`/`<C-n>` | Move up/down · `<C-d>`/`<C-u>` page |
@@ -70,13 +68,12 @@ vim.keymap.set("n", "<leader>ss", function() require("loupe").open({ source = "d
 
 `:Loupe [source]` opens a specific source (`:Loupe grep`, `:Loupe symbols`, …).
 
-The window bar carries the source tabs and the keys that open each menu; the
-prompt row carries the source glyph and the count (`shown/total` for list
-sources, `found` for live ones — `+` means the search stopped at
-`max_results`, `…` that it is still running). `<C-o>` and `<C-x>` mark each
-entry with its key and tint that strip rather than opening anything.
-Reopening renders the last file list at once and refreshes it in the
-background.
+The window bar carries the source tabs and the key that opens the source
+menu; the prompt row carries the source glyph and the count (`shown/total`
+for list sources, `found` for live ones — `+` means the search stopped at
+`max_results`, `…` that it is still running). `<C-o>` marks each tab with its
+key and tints that strip rather than opening anything. Reopening renders the
+last file list at once and refreshes it in the background.
 
 ## API
 
@@ -98,7 +95,6 @@ require("loupe").setup({
   backends = { files = { "fd", "rg", "git" }, grep = { "rg", "git" } },
   mappings = {
     browse = { ["<CR>"] = "split" },
-    menu = { ["m"] = "rename" },
     sources = { ["t"] = "changed" },
   },
 })

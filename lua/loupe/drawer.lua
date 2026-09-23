@@ -112,7 +112,6 @@ end
 
 local function define_highlights()
 	vim.api.nvim_set_hl(0, "LoupeMatch", { link = "Search", default = true })
-	vim.api.nvim_set_hl(0, "LoupeMark", { link = "DiagnosticInfo", default = true })
 	vim.api.nvim_set_hl(0, "LoupePrompt", { link = "Title", default = true })
 	vim.api.nvim_set_hl(0, "LoupePromptCaret", { link = "LoupePrompt", default = true })
 	vim.api.nvim_set_hl(0, "LoupeCursor", { blend = 100, nocombine = true })
@@ -297,16 +296,16 @@ local function strip(blocks, width, focus, right, fill)
 end
 
 --- Whether `key` is the letter `label` starts with. Only the first letter is
---- ever marked: underlining the `c` of "dupli[c]ate" would name the key
+--- ever marked: underlining the `c` of "do[c]_symbols" would name the key
 --- without pointing at anything a reader can follow. A shifted key is never
---- marked either — the `y` of "yank" is not `Y`.
+--- marked either — the `d` of "dirs" is not `D`.
 local function starts_with_key(label, key)
 	return key ~= nil and #key == 1 and not key:match("%u") and label:sub(1, 1):lower() == key:lower()
 end
 
 --- One entry, split so its key can be marked without moving the label: the
 --- text stays put and only that letter changes weight. A key that is not the
---- first letter is appended, and a named key (`enter`, `ctrl+x`) leads.
+--- first letter is appended, and a named key (`enter`, `ctrl+o`) leads.
 local function entry_blocks(label, key, group, name, marked)
 	local function block(text, g)
 		return { text = text, group = g or group, name = name }
@@ -351,17 +350,7 @@ function M.tabs(sources, active, width, opts)
 	return strip(blocks, width, active, opts.right, normal)
 end
 
---- A menu as a lit strip: the same tabs treatment, every entry marked with
---- its key.
-function M.menu(entries, width, right)
-	local blocks = {}
-	for _, entry in ipairs(entries) do
-		vim.list_extend(blocks, entry_blocks(entry[2], M.friendly_key(entry[1]), "LoupeTabSelect", nil, true))
-	end
-	return strip(blocks, width, nil, right, "LoupeTabSelect")
-end
-
---- Key notation as a person would say it: `<C-X>` -> `ctrl+x`.
+--- Key notation as a person would say it: `<C-O>` -> `ctrl+o`.
 function M.friendly_key(lhs)
 	local named = {
 		["<CR>"] = "enter",
@@ -384,21 +373,6 @@ function M.friendly_key(lhs)
 	end
 	return (lhs:gsub("^<(.*)>$", "%1"):lower())
 end
-
--- The order actions are offered in: the ones that change a file first, then
--- the ways to copy its path, then the rest. Anything unlisted follows.
-local ACTION_ORDER = {
-	"rename",
-	"delete",
-	"create",
-	"duplicate",
-	"open_external",
-	"quickfix",
-	"yank",
-	"yank_rel",
-	"yank_name",
-	"yank_dir",
-}
 
 --- First key bound to `action` in `map`, in a stable order. `<Esc>` wins when
 --- it is one of them: it is the one people reach for.
@@ -428,49 +402,6 @@ local function source_keys(map)
 	return out
 end
 
---- The action menu's `{ key, label }` pairs, in the order they are offered.
-function M.action_entries(session, cfg)
-	local map = (cfg.mappings or {}).menu or {}
-	local out, seen = {}, {}
-	for _, action in ipairs(ACTION_ORDER) do
-		local key = key_for(map, action)
-		if key then
-			seen[key] = true
-			out[#out + 1] = { key, M.action_label(session, action) }
-		end
-	end
-	local rest = {}
-	for key in pairs(map) do
-		if not seen[key] then
-			rest[#rest + 1] = key
-		end
-	end
-	table.sort(rest)
-	for _, key in ipairs(rest) do
-		out[#out + 1] = { key, M.action_label(session, map[key]) }
-	end
-	return out
-end
-
--- Action names are identifiers; these are what they are called on screen.
-local ACTION_NAMES = {
-	open_external = "open ext",
-	yank = "yank path",
-	yank_rel = "yank rel",
-	yank_name = "yank name",
-	yank_dir = "yank dir",
-}
-
---- Name an action as the active source performs it, so the hint never
---- promises something the key does not do (`delete` closes a buffer in the
---- buffers source).
-function M.action_label(session, name)
-	if name == "delete" and session.source and session.source.delete == "buffer" then
-		return "close"
-	end
-	return ACTION_NAMES[name] or name
-end
-
 -- ---------------------------------------------------------------------------
 -- lines
 
@@ -480,24 +411,17 @@ local function prompt_line(session, cfg)
 	local caret = cfg.prompt_caret or "▏"
 	local spans = {}
 
-	local prefix, value, cursor
-	if session.prompt then
-		prefix = " " .. session.prompt.label
-		value = session.prompt.value or ""
-		cursor = session.prompt.caret or vim.fn.strchars(value)
-	else
-		local icon = cfg.icons and session.source and session.source.icon
-		prefix = (icon and icon ~= "") and (" " .. icon .. " ") or (" " .. cfg.prompt)
-		value = session.query or ""
-		cursor = session.caret or vim.fn.strchars(value)
-	end
+	local icon = cfg.icons and session.source and session.source.icon
+	local prefix = (icon and icon ~= "") and (" " .. icon .. " ") or (" " .. cfg.prompt)
+	local value = session.query or ""
+	local cursor = session.caret or vim.fn.strchars(value)
 
 	local text = prefix .. vim.fn.strcharpart(value, 0, cursor)
 	spans[#spans + 1] = { 0, #prefix, "LoupePrompt" }
 	spans[#spans + 1] = { #text, #text + #caret, "LoupePromptCaret" }
 	text = text .. caret .. vim.fn.strcharpart(value, cursor)
 
-	if not session.prompt and value == "" and session.source then
+	if value == "" and session.source then
 		local ghost = session.source.label or ""
 		if ghost ~= "" then
 			ghost = " " .. ghost
@@ -519,11 +443,6 @@ local function match_line(session, cfg, item, width, selected)
 	local cand = item.cand
 	local parts = display.row(cand, { git = cfg.git and session.git or nil, icons = cfg.icons })
 
-	local mark = ""
-	if session.marked and next(session.marked) ~= nil then
-		mark = session.marked[parse.identity(cand)] and "● " or "  "
-	end
-
 	local inner = math.max(1, width - PAD * 2)
 	local meta_text = {}
 	for _, chunk in ipairs(parts.meta) do
@@ -531,7 +450,7 @@ local function match_line(session, cfg, item, width, selected)
 	end
 	local right = fit(table.concat(meta_text, "  "), math.floor(inner * META_SHARE))
 
-	local prefix = mark .. (parts.icon ~= "" and (parts.icon .. " ") or "")
+	local prefix = parts.icon ~= "" and (parts.icon .. " ") or ""
 	local right_room = right ~= "" and (vim.fn.strdisplaywidth(right) + GAP) or 0
 	local room = math.max(1, inner - vim.fn.strdisplaywidth(prefix) - right_room)
 
@@ -558,12 +477,6 @@ local function match_line(session, cfg, item, width, selected)
 		spans[#spans + 1] = { 0, #line, "LoupeSelection", 90 }
 	end
 	local at = PAD
-	if mark ~= "" then
-		if session.marked[parse.identity(cand)] then
-			spans[#spans + 1] = { at, at + #mark, "LoupeMark" }
-		end
-		at = at + #mark
-	end
 	if parts.icon ~= "" then
 		spans[#spans + 1] = { at, at + #parts.icon, parts.icon_hl }
 		at = at + #parts.icon + 1
@@ -602,10 +515,9 @@ local function match_line(session, cfg, item, width, selected)
 	return line, spans
 end
 
---- The window bar: source tabs, or the action menu while it is open. It is
---- the picker's only chrome, so the keys that open each menu live here too —
---- the source key at the left, and, when the root has nothing to say, the
---- action key at the right.
+--- The window bar: the source tabs, lit while the source menu is open. It is
+--- the picker's only chrome, so the key that opens that menu lives here too,
+--- at the left, with the root at the right when there is one to show.
 local function winbar_text(session, cfg, width)
 	local maps = cfg.mappings or {}
 	local function browse_key(action)
@@ -613,27 +525,8 @@ local function winbar_text(session, cfg, width)
 	end
 	local cancel = browse_key("close") .. " cancel"
 
-	if session.prompt then
-		local prompt_map = maps.prompt or {}
-		local entries = {}
-		for _, pair in ipairs({ { "submit", "confirm" }, { "cancel", "cancel" } }) do
-			local key = key_for(prompt_map, pair[1])
-			if key then
-				entries[#entries + 1] = { key, pair[2] }
-			end
-		end
-		return M.menu(entries, width, "")
-	end
-
-	if session.menu == "actions" then
-		return M.menu(M.action_entries(session, cfg), width, cancel)
-	end
-
 	local select = session.menu == "sources"
 	local right = root_text(session)
-	if right == "" and not select then
-		right = browse_key("menu") .. " actions"
-	end
 	return M.tabs(session.sources or {}, session.source and session.source.name, width, {
 		right = select and cancel or right,
 		-- kept while selecting: dropping it would slide every tab left, and

@@ -10,10 +10,7 @@
 ---
 --- `ctx` fields: `state` (session table), `is_active`, `render`, `close`,
 --- `choose`, `reload`, `refresh`, `move`, `page`, `current`, `set_query`,
---- `start_prompt`, `start_delete`, `set_source`, `cycle_source`, `run_action`,
---- `mouse_select`,
---- `yank`, `go_parent`, `go_root`, `toggle_mark`, `quickfix`,
---- `open_external`.
+--- `set_source`, `cycle_source`, `mouse_select`, `go_parent`, `go_root`.
 
 local tf = require("loupe.util.textfield")
 local config = require("loupe.config")
@@ -32,70 +29,6 @@ local function is_printable(ch, key)
 	end
 	local b = ch:byte(1)
 	return b ~= nil and b >= 32 and b ~= 127
-end
-
---- One key while an inline prompt (rename/delete/create) is active.
-local function handle_prompt(ctx, map, ch, key)
-	local S = ctx.state
-	local p = S.prompt
-	local action = map[key]
-	if action == "submit" then
-		local value, name = p.value, p.action
-		S.prompt = nil
-		ctx.run_action(name, value)
-	elseif action == "cancel" then
-		S.prompt = nil
-	elseif action == "backspace" then
-		p.value, p.caret = tf.backspace(p.value, p.caret)
-	elseif action == "delete" then
-		p.value, p.caret = tf.delete(p.value, p.caret)
-	elseif action == "delete_word" then
-		p.value, p.caret = tf.delete_word(p.value, p.caret)
-	elseif action == "clear" then
-		p.value, p.caret = "", 0
-	elseif action == "caret_left" then
-		p.caret = math.max(0, p.caret - 1)
-	elseif action == "caret_right" then
-		p.caret = math.min(tf.len(p.value), p.caret + 1)
-	elseif action == "home" then
-		p.caret = 0
-	elseif action == "end" then
-		p.caret = tf.len(p.value)
-	elseif is_printable(ch, key) then
-		p.value, p.caret = tf.insert(p.value, p.caret, ch)
-	end
-end
-
---- One key while the action menu (`<C-x>`) is showing.
-local function handle_menu(ctx, map, key)
-	local S = ctx.state
-	S.menu = nil
-	local item = ctx.current()
-	if not item then
-		return
-	end
-	local action = map[key]
-	if action == "rename" then
-		ctx.start_prompt("Rename: ", item.cand.rel, "rename")
-	elseif action == "delete" then
-		ctx.start_delete()
-	elseif action == "create" then
-		ctx.start_prompt("Add (end with / for a dir): ", "", "create")
-	elseif action == "duplicate" then
-		ctx.start_prompt("Duplicate to: ", item.cand.rel, "duplicate")
-	elseif action == "yank" then
-		ctx.yank(item, "abs")
-	elseif action == "yank_rel" then
-		ctx.yank(item, "rel")
-	elseif action == "yank_name" then
-		ctx.yank(item, "name")
-	elseif action == "yank_dir" then
-		ctx.yank(item, "dir")
-	elseif action == "open_external" then
-		ctx.open_external(item)
-	elseif action == "quickfix" then
-		ctx.quickfix()
-	end
 end
 
 --- One key while the source menu (`<C-o>`) is showing.
@@ -122,8 +55,6 @@ local function handle_browse(ctx, map, ch, key)
 		return not ctx.choose("vsplit")
 	elseif action == "tab" then
 		return not ctx.choose("tab")
-	elseif action == "menu" then
-		S.menu = "actions"
 	elseif action == "sources" then
 		S.menu = "sources"
 	elseif action == "source_next" then
@@ -132,9 +63,6 @@ local function handle_browse(ctx, map, ch, key)
 		ctx.cycle_source(-1)
 	elseif action == "root" then
 		ctx.go_root()
-	elseif action == "mark" then
-		ctx.toggle_mark()
-		ctx.move(1)
 	elseif action == "select" then
 		ctx.mouse_select()
 	elseif action == "open_mouse" then
@@ -224,11 +152,7 @@ function M.run(ctx)
 		local key = vim.fn.keytrans(ch)
 
 		local quit
-		if ctx.state.prompt then
-			handle_prompt(ctx, maps.prompt, ch, key)
-		elseif ctx.state.menu == "actions" then
-			handle_menu(ctx, maps.menu, key)
-		elseif ctx.state.menu == "sources" then
+		if ctx.state.menu == "sources" then
 			handle_sources(ctx, maps.sources, key)
 		else
 			quit = handle_browse(ctx, maps.browse, ch, key)

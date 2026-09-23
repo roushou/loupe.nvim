@@ -13,19 +13,6 @@ function M.candidate(root, rel, dir)
 	return { rel = rel, abs = vim.fs.joinpath(root, rel), dir = dir == true }
 end
 
---- What makes a candidate itself, for keying the marked set by.
----
---- The path alone will not do. A location source puts many candidates in one
---- file — every grep hit, every symbol — so a path-keyed mark would collapse
---- them: marking one hit would mark, and send to the quickfix list, every
---- other hit in that file.
-function M.identity(cand)
-	if cand.lnum then
-		return ("%s:%d:%d"):format(cand.abs, cand.lnum, cand.col or 0)
-	end
-	return cand.abs
-end
-
 --- Parse newline-delimited root-relative paths into deduped candidates.
 --- Strips a leading `./` and, for directories, the trailing `/` fd emits.
 function M.paths(stdout, root, dir)

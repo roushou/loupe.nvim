@@ -103,16 +103,6 @@ h.test("search reports failure when no backend is available", function()
 	h.eq(got, { {}, false })
 end)
 
-h.test("only the buffers source reinterprets delete", function()
-	for name, src in pairs(source.registry) do
-		if name == "buffers" then
-			h.eq(src.delete, "buffer")
-		else
-			h.eq(src.delete, nil, name .. " unexpectedly overrides delete")
-		end
-	end
-end)
-
 h.test("the tab order is the order sources were registered", function()
 	local names = vim.tbl_map(function(src)
 		return src.name

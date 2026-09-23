@@ -84,31 +84,6 @@ h.test("friendly_key spells keys the way people say them", function()
 	h.eq(drawer.friendly_key("r"), "r")
 end)
 
-h.test("action entries are offered in a canonical order", function()
-	local cfg = require("loupe.config").get()
-	local entries = drawer.action_entries(session(), cfg)
-	h.eq(entries[1], { "r", "rename" }, "actions are not in their canonical order")
-	h.eq(entries[2], { "d", "delete" })
-	h.ok(#entries > 4, "action menu not listed")
-end)
-
-h.test("action entries name delete as close where the source closes buffers", function()
-	local entries = drawer.action_entries(session({ source = source.get("buffers") }), require("loupe.config").get())
-	local found
-	for _, entry in ipairs(entries) do
-		if entry[2] == "close" then
-			found = entry[1]
-		end
-	end
-	h.eq(found, "d")
-end)
-
-h.test("action_label renames delete where a source closes buffers", function()
-	h.eq(drawer.action_label({ source = source.get("buffers") }, "delete"), "close")
-	h.eq(drawer.action_label({ source = source.get("buffers") }, "rename"), "rename")
-	h.eq(drawer.action_label(session(), "delete"), "delete")
-end)
-
 --- Render a session into a real drawer split and return its lines.
 local function render(over)
 	local buf = require("loupe.util.buf").scratch({})
@@ -207,33 +182,20 @@ h.test("render dims the parent directory of a path row", function()
 	h.eq(line:sub(dim[1] + 1, dim[2]), "dir/")
 end)
 
-h.test("action labels read as words, not identifiers", function()
-	local cfg = require("loupe.config").get()
-	local labels = {}
-	for _, entry in ipairs(drawer.action_entries(session(), cfg)) do
-		labels[entry[1]] = entry[2]
-	end
-	h.eq(labels["o"], "open ext")
-	h.eq(labels["Y"], "yank rel")
-	h.eq(labels["r"], "rename")
-end)
-
-h.test("a menu marks each entry's key without moving its label", function()
-	local bar = drawer.menu({ { "r", "rename" }, { "a", "create" }, { "Y", "yank rel" } }, 200, "esc cancel")
-	h.eq(plain(bar), " rename  create a  yank rel Y esc cancel ")
-	h.ok(bar:find("LoupeTabSelectKey#r", 1, true), "first letter not marked: " .. bar)
-	h.ok(bar:find("LoupeTabSelectKey#a", 1, true), "appended key not marked: " .. bar)
-	h.ok(bar:find("LoupeTabSelectKey#Y", 1, true), "shifted key not appended: " .. bar)
-end)
-
 h.test("a named key leads its label", function()
-	local bar = drawer.menu({ { "<CR>", "confirm" }, { "<Esc>", "cancel" } }, 200, "")
-	h.eq(plain(bar), " enter confirm  esc cancel ")
+	-- a source bound to something other than a bare letter: the key cannot be
+	-- marked inside the label, so it goes in front of it
+	local sources = { source.get("doc_symbols") }
+	local lit = drawer.tabs(sources, "doc_symbols", 200, { keys = { doc_symbols = "ctrl+t" }, select = true })
+	h.eq(plain(lit), " ctrl+t Doc ")
 end)
 
-h.test("an interior letter is never marked as the key", function()
-	-- the `c` of "duplicate" is the key, but pointing at it would mislead
-	h.eq(plain(drawer.menu({ { "c", "duplicate" } }, 200, "")), " duplicate c ")
+h.test("a shifted key is appended rather than marked in place", function()
+	-- the `d` of "Dirs" is not `D`, so pointing at it would name the wrong key
+	local sources = { source.get("dirs") }
+	local lit = drawer.tabs(sources, "dirs", 200, { keys = { dirs = "D" }, select = true })
+	h.eq(plain(lit), " Dirs D ")
+	h.ok(lit:find("LoupeTabSelectKey#D", 1, true), "shifted key not appended: " .. lit)
 end)
 
 h.test("a location row puts its text left and its location right", function()

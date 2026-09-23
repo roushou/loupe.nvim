@@ -16,8 +16,6 @@ local preview = require("loupe.preview")
 local frecency = require("loupe.frecency")
 local cache = require("loupe.cache")
 local git = require("loupe.git")
-local action = require("loupe.action")
-local parse = require("loupe.backend.parse")
 local tf = require("loupe.util.textfield")
 local debounce = require("loupe.util.debounce")
 local input = require("loupe.input")
@@ -209,11 +207,6 @@ local function set_query(text, caret)
 	refresh()
 end
 
-local function start_prompt(label, value, name)
-	value = value or ""
-	S.prompt = { label = label, value = value, action = name, caret = tf.len(value) }
-end
-
 --- Switch the active source and reload its candidates.
 local function set_source(name)
 	local src = source.get(name)
@@ -242,47 +235,6 @@ local function cycle_source(delta)
 		return
 	end
 	set_source(order[(at - 1 + delta) % #order + 1].name)
-end
-
---- Run a committed action by name and refresh the view.
-local function run_action(name, value)
-	local item = current()
-	if not item then
-		return
-	end
-	local ctx = { session = S, item = item, root = S.root }
-	if name == "rename" then
-		local rel = action.rename(ctx, value)
-		if rel then
-			refresh()
-			focus(rel)
-		end
-	elseif name == "delete" then
-		if value:lower() == "y" and action.delete(ctx) then
-			refresh()
-		end
-	elseif name == "close_buffer" then
-		if value:lower() == "y" and action.close_buffer(ctx, true) then
-			refresh()
-		end
-	elseif name == "create" then
-		local rel = action.create(ctx, value)
-		if rel then
-			S.query = ""
-			S.caret = 0
-			refresh()
-			focus(rel)
-		end
-	elseif name == "duplicate" then
-		local rel = action.duplicate(ctx, value)
-		if rel then
-			S.query = ""
-			S.caret = 0
-			refresh()
-			focus(rel)
-		end
-	end
-	render()
 end
 
 --- (Re)enumerate the current root/source asynchronously and refresh the view.
@@ -357,46 +309,6 @@ function reload()
 	end
 end
 
---- Begin the delete action for the current entry.
----
---- What `delete` means is the source's to say: a source with
---- `delete = "buffer"` (see `loupe.source.buffers`) closes the buffer, which
---- loses nothing and so needs no confirmation unless the buffer is modified.
---- Everything else removes the file and always asks first.
-local function start_delete()
-	local item = current()
-	if not item then
-		return
-	end
-	local rel = item.cand.rel
-	if S.source.delete ~= "buffer" then
-		start_prompt("Delete " .. rel .. "? [y/N] ", "", "delete")
-		return
-	end
-	local buf = item.cand.bufnr
-	if buf and vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].modified then
-		start_prompt("Close " .. rel .. " with unsaved changes? [y/N] ", "", "close_buffer")
-		return
-	end
-	if action.close_buffer({ session = S, item = item, root = S.root }) then
-		refresh()
-	end
-end
-
---- Toggle the mark on the current match.
-local function toggle_mark()
-	local item = current()
-	if not item then
-		return
-	end
-	local key = parse.identity(item.cand)
-	if S.marked[key] then
-		S.marked[key] = nil
-	else
-		S.marked[key] = true
-	end
-end
-
 --- Move the root up one directory.
 local function go_parent()
 	local parent = vim.fs.dirname(S.root)
@@ -407,7 +319,6 @@ local function go_parent()
 	S.query = ""
 	S.caret = 0
 	S.git = nil
-	S.marked = {}
 	reload()
 end
 
@@ -417,26 +328,7 @@ local function go_root()
 	S.query = ""
 	S.caret = 0
 	S.git = nil
-	S.marked = {}
 	reload()
-end
-
---- Send marked candidates (or the current one) to the quickfix list.
-local function quickfix()
-	local items = {}
-	for _, c in ipairs(S.candidates) do
-		if S.marked[parse.identity(c)] then
-			items[#items + 1] = c
-		end
-	end
-	if #items == 0 then
-		local item = current()
-		if not item then
-			return
-		end
-		items = { item.cand }
-	end
-	action.quickfix(items)
 end
 
 --- Close the picker and return to the window it was opened from.
@@ -609,9 +501,7 @@ function M.open(opts)
 		-- first match drawn (the drawer keeps this in step with `index`)
 		top = 1,
 		sources = source.order,
-		marked = {},
 		git = nil,
-		prompt = nil,
 		menu = nil,
 		-- dynamic sources: in-flight search handle, its progress and whether
 		-- it was stopped at `max_results`
@@ -669,22 +559,11 @@ function M.open(opts)
 		page = page,
 		current = current,
 		set_query = set_query,
-		start_prompt = start_prompt,
 		set_source = set_source,
 		cycle_source = cycle_source,
-		run_action = run_action,
-		start_delete = start_delete,
 		mouse_select = mouse_select,
 		go_parent = go_parent,
 		go_root = go_root,
-		toggle_mark = toggle_mark,
-		quickfix = quickfix,
-		yank = function(item, variant)
-			action.yank({ session = S, item = item, root = S.root }, variant)
-		end,
-		open_external = function(item)
-			action.open_external({ session = S, item = item, root = S.root })
-		end,
 	})
 	if not ok then
 		M.close()

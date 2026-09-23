@@ -8,10 +8,9 @@ CONTENTS                                                *loupe-contents*
   3. Commands ............................ |loupe-commands|
   4. Sources ............................. |loupe-sources|
   5. Configuration ....................... |loupe-configuration|
-  6. Actions ............................. |loupe-actions|
-  7. Health .............................. |loupe-health|
-  8. Lua API ............................. |loupe-api|
-  9. Highlights .......................... |loupe-highlights|
+  6. Health .............................. |loupe-health|
+  7. Lua API ............................. |loupe-api|
+  8. Highlights .......................... |loupe-highlights|
 
 ==============================================================================
 1. INTRODUCTION                                          *loupe-introduction*
@@ -96,21 +95,18 @@ list immediately while a fresh enumeration replaces it in the background.
 The drawer is laid out as a fixed viewport: the prompt on the first row and
 one match per row after it. The window bar is the only chrome: it holds the
 source tabs (the active one highlighted) prefixed by the key that switches
-them, and on the right either the current root, when browsing away from the
-project root (`<BS>` on an empty query goes up, `<C-r>` returns), or the key
-that opens the action menu.
+them, and on the right the current root, when browsing away from the project
+root (`<BS>` on an empty query goes up, `<C-r>` returns).
 
-Both menus take over that strip rather than opening anything: `<C-o>` marks
-each tab with its own key, `<C-x>` replaces the tabs with the actions, and an
-inline prompt shows how to confirm or cancel. The strip takes a lifted
-background while one of them is open — a nudge from the normal one, computed
-from it, so nothing else about the row changes.
+The source menu takes over that strip rather than opening anything: `<C-o>`
+marks each tab with its own key. The strip takes a lifted background while it
+is open — a nudge from the list's, so nothing else about the row changes.
 
 Labels do not move: a key that is the label's first letter is underlined
-where it already is, and one that is not is appended (`Doc t`, `yank rel Y`).
-An interior letter is never marked, and neither is a shifted key. Any other
-key cancels, which the strip says while it is lit. Rebinding
-`mappings.sources` or `mappings.menu` changes the keys shown.
+where it already is, and one that is not is appended (`Doc t`). An interior
+letter is never marked, and neither is a shifted key. Any other key cancels,
+which the strip says while it is lit. Rebinding `mappings.sources` changes the
+keys shown.
 
 The prompt shows the source glyph, the source name while the query is empty,
 and the count on the right: `shown/total` for list sources, `found` for live
@@ -145,28 +141,12 @@ full set.
 `preview.max_lines` and `preview.max_bytes` bound what is read into the
 preview, so a file with one enormous line costs no more than a normal one.
 
-Mappings are grouped by context: `browse` (result list), `menu` (the `<C-x>`
-action submenu), `sources` (the `<C-o>` source menu) and `prompt` (inline text
-prompts). Keys may use any notation Neovim understands (`<C-s>` == `<C-S>`).
+Mappings are grouped by context: `browse` (result list) and `sources` (the
+`<C-o>` source menu). Keys may use any notation Neovim understands
+(`<C-s>` == `<C-S>`).
 
 ==============================================================================
-6. ACTIONS                                                   *loupe-actions*
-
-Open the action menu with `<C-x>`:
-
-  r  rename / move       d  delete (to trash)     a  add (trailing `/` = dir)
-  c  duplicate           y  yank absolute path    Y  yank relative path
-  n  yank filename       D  yank parent dir        o  open with OS handler
-  q  quickfix (marked or current)
-
-In the `buffers` source `d` closes the buffer and leaves the file on disk
-alone; a buffer with unsaved changes asks first. Windows showing it switch to
-another buffer, so the layout stays as it was.
-
-<Tab> marks an entry; marks feed `quickfix`.
-
-==============================================================================
-7. HEALTH                                                     *loupe-health*
+6. HEALTH                                                     *loupe-health*
 
 >vim
     :checkhealth loupe
@@ -175,7 +155,7 @@ reports external tools, the resolved enumeration backends and matcher, and the
 resolved project root.
 
 ==============================================================================
-8. LUA API                                                       *loupe-api*
+7. LUA API                                                       *loupe-api*
 
 loupe.setup({opts})         Configure. See |loupe-configuration|.
 loupe.open({opts})          Open. `opts.source` selects the initial source.
@@ -188,7 +168,7 @@ block, without which Neovim's interrupt would abort the picker's key loop
 part-way and leave the drawer, the preview and the hidden cursor behind.
 
 ==============================================================================
-9. HIGHLIGHTS                                             *loupe-highlights*
+8. HIGHLIGHTS                                             *loupe-highlights*
 
 Every group is defined with `default = true` and linked to a standard group,
 so a colourscheme applies without configuration. Override any of them:
@@ -212,7 +192,6 @@ so a colourscheme applies without configuration. Override any of them:
   LoupeGhost          Comment             the source name on an empty query
   LoupeCount          LineNr              the result count
   LoupeEmpty          Comment             the "no matches" line
-  LoupeMark           DiagnosticInfo      the <Tab> mark
   LoupeBorder         StatusLine          the window bar
   LoupeGitAdd         DiagnosticOk        git: added
   LoupeGitMod         DiagnosticWarn      git: modified
