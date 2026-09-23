@@ -89,6 +89,12 @@ function M.highlight(buf, ft)
 	local has_parser, parser = pcall(vim.treesitter.get_parser, buf, lang, { error = false })
 	has_parser = has_parser and parser ~= nil
 	if has_parser then
+		-- parse before attaching: past a size budget treesitter parses in the
+		-- background and asks for a redraw when it lands, which never comes
+		-- while the picker sits blocked on a key
+		pcall(function()
+			parser:parse(true)
+		end)
 		has_parser = pcall(vim.treesitter.start, buf, lang)
 	end
 	if not has_parser then

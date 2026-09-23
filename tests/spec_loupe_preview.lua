@@ -72,3 +72,25 @@ h.test("preview diagnostics can be disabled", function()
 	vim.api.nvim_win_close(drawer, true)
 	vim.diagnostic.reset(ns, buf)
 end)
+
+h.test("the syntax tree is parsed before the highlighter is attached", function()
+	-- Past a size budget treesitter parses in the background and asks for a
+	-- redraw when it lands. The picker blocks on a key immediately after
+	-- rendering, so that redraw never comes and the preview shows plain text
+	-- until the user happens to press something else. Parsing up front is
+	-- what makes the first paint the right one.
+	local dir = tmpdir()
+	local path = dir .. "/big.lua"
+	local lines = {}
+	for i = 1, 2000 do
+		lines[i] = ("local function f%d(a, b) return { a = a, b = b, n = %d } end"):format(i, i)
+	end
+	vim.fn.writefile(lines, path)
+
+	preview.close()
+	local _, buf = open_preview(path)
+	local parser = vim.treesitter.get_parser(buf, "lua", { error = false })
+	h.ok(parser ~= nil, "no parser for the preview buffer")
+	h.ok(parser:is_valid(), "the tree was left unparsed: the first paint will be plain text")
+	preview.close()
+end)
