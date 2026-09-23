@@ -199,6 +199,8 @@ end)
 -- Marks key on the candidate, not on its file: a location source puts many
 -- candidates in one file, and keying on the path alone collapses them.
 
+local frecency = require("loupe.frecency")
+
 require("loupe.source").register({
 	name = "_hits",
 	label = "Hits",
@@ -240,4 +242,29 @@ h.test("marking two hits in one file sends both", function()
 		qflist_after({ vim.keycode("<C-N>"), vim.keycode("<Tab>"), vim.keycode("<Tab>"), vim.keycode("<C-X>"), "q" })
 	h.eq(#qf, 2)
 	h.eq({ qf[1].lnum, qf[2].lnum }, { 1, 2 })
+end)
+
+h.test("a file opened by jumping to a location counts as opened", function()
+	frecency.path = vim.fn.tempname()
+	local origin = vim.api.nvim_get_current_win()
+	local restore = vim.api.nvim_win_get_buf(origin)
+	local real = vim.fn.LoupeGetChar
+	local keys = { vim.keycode("<C-N>"), vim.keycode("<CR>") }
+	local at = 0
+	vim.fn.LoupeGetChar = function()
+		at = at + 1
+		return keys[at] or vim.keycode("<Esc>")
+	end
+	local ok, err = pcall(session.open, { source = "_hits" })
+	vim.fn.LoupeGetChar = real
+	vim.api.nvim_win_set_buf(origin, restore)
+	h.ok(ok, tostring(err))
+
+	local seen = vim.tbl_map(function(c)
+		return c.abs
+	end, frecency.recent(root))
+	h.ok(
+		vim.tbl_contains(seen, root .. "/README.md"),
+		"grep and symbol jumps never reach the frecency store, so Recent never sees them"
+	)
 end)

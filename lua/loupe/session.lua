@@ -515,6 +515,13 @@ local function choose(kind)
 		end
 	end
 
+	-- Recorded for every path that opens a file, the location sources
+	-- included: a file reached by grepping has been opened just as much as one
+	-- picked off the list, and the `recent` source is this store read back.
+	if config.get().frecency and item.cand.abs then
+		frecency.record(item.cand.abs)
+	end
+
 	-- Any candidate carrying a line number (grep, symbols, diagnostics) jumps
 	-- to that location, reusing an already-loaded buffer.
 	if item.cand.lnum then
@@ -522,9 +529,6 @@ local function choose(kind)
 	end
 
 	local origin = S.origin_win
-	if config.get().frecency and item.cand.abs then
-		frecency.record(item.cand.abs)
-	end
 
 	-- `bufadd` rather than `:edit`: it reuses a buffer already holding this
 	-- file, unsaved changes and all, where `:edit` would reload over them.
