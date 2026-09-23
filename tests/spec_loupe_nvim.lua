@@ -1,5 +1,5 @@
 local h = require("tests.harness")
-local nvim_backend = require("loupe.backend.nvim")
+local nvim_backend = require("loupe.backend").registry.nvim
 
 local function tmpdir()
 	local dir = vim.fn.tempname()

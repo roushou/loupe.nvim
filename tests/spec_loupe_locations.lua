@@ -7,7 +7,7 @@ local function tmpdir()
 end
 
 h.test("doc_symbols wraps params in textDocument", function()
-	local lsp = require("loupe.backend.lsp")
+	local lsp = require("loupe.backend").registry.lsp
 	local real = vim.lsp.get_clients
 	local seen
 	local fake = {

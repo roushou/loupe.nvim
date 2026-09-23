@@ -1,23 +1,49 @@
 --- Backend registry and enumeration facade.
 ---
---- A backend is a tool adapter exposing `list` operations keyed by capability
---- (`files`, `dirs`, later `changed`, `buffers`, ...). `config.backends` holds
---- per-capability preference lists; the first available backend wins and a
---- failing run cascades to the next. Fuzzy ranking lives in `loupe.matcher`;
---- this module only produces candidates.
+--- Operations are grouped by use case, one module per capability (`files`,
+--- `grep`, `symbols`, ...), each gathering every tool that can answer it.
+--- `loupe.backend.tools` holds the tool identities. This module assembles the
+--- two into the registry the resolver reads: `registry[tool][kind][op]`.
+---
+--- `config.backends` holds per-capability preference lists — the same keys
+--- the capability modules are named for — and the first available tool wins,
+--- with a failing run cascading to the next. Fuzzy ranking lives in
+--- `loupe.matcher`; this module only produces candidates.
 
 local config = require("loupe.config")
 local matcher = require("loupe.matcher")
 local parse = require("loupe.backend.parse")
 
+--- One module per use case. Adding a capability means adding it here and
+--- writing the module; nothing else in the registry needs to know.
+local CAPABILITIES = {
+	"files",
+	"dirs",
+	"changed",
+	"grep",
+	"buffers",
+	"diagnostics",
+	"symbols",
+	"recent",
+}
+
 local M = { registry = {} }
 
-M.registry.fd = require("loupe.backend.fd")
-M.registry.rg = require("loupe.backend.rg")
-M.registry.git = require("loupe.backend.git")
-M.registry.nvim = require("loupe.backend.nvim")
-M.registry.internal = require("loupe.backend.internal")
-M.registry.lsp = require("loupe.backend.lsp")
+for id, tool in pairs(require("loupe.backend.tools")) do
+	M.registry[id] = vim.tbl_extend("error", { list = {}, search = {} }, tool)
+end
+
+for _, capability in ipairs(CAPABILITIES) do
+	for kind, ops in pairs(require("loupe.backend." .. capability)) do
+		for op, tools in pairs(ops) do
+			for id, fn in pairs(tools) do
+				local tool = M.registry[id]
+				assert(tool, ("%s.%s names no tool: %s"):format(capability, op, id))
+				tool[kind][op] = fn
+			end
+		end
+	end
+end
 
 --- A backend is available when its `available()` hook passes, or it declares
 --- no exe, or its exe is on PATH.
