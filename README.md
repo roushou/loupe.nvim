@@ -74,8 +74,6 @@ vim.api.nvim_create_autocmd("LspAttach", {
 | `<C-r>` | Jump back to the project root |
 | `<BS>` | On an empty query, go up a directory |
 | `<C-p>`/`<C-n>` | Move up/down · `<C-d>`/`<C-u>` page |
-| `<C-w>` + motion | Run a window command (`h`/`j`/`k`/`l`/`w`/…), parking loupe as focus leaves |
-| `<M-BS>` | Delete the word before the caret |
 | `<Esc>` | Park — keep the drawer and its state, return to the editor |
 | `<C-c>` | Close |
 
@@ -90,10 +88,6 @@ window command applies again. Focus it once more — `<C-w>b`, `<C-w>j` from
 the pane above, or `:Loupe` — and filter mode resumes over the same state.
 `<C-c>` closes it for good, and choosing a file parks it too (set
 `close_on_choose` for the classic "select and it is gone" behaviour).
-
-The `<C-w>` prefix works from inside the drawer as well, so you never have to
-park first just to move around: `<C-w>h/j/k/l/w/…` runs the matching window
-command and parks as focus leaves.
 
 The preview belongs to filter mode: it is shown only while the drawer has the
 cursor and a row is selected, so moving the cursor out never leaves a float
