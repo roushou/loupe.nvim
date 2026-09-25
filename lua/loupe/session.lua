@@ -25,9 +25,23 @@ local M = {}
 local S = nil
 local run_search
 local reload
+local run_loop
 
-local function active()
-	return S ~= nil and S.active
+--- Whether a session exists at all, focused or parked.
+local function alive()
+	return S ~= nil
+end
+
+--- Whether loupe currently owns the input focus: the session exists and its
+--- drawer window is current. The key loop and the preview exist only while
+--- this holds; parking leaves the session (and the drawer) alive but hands the
+--- cursor back to the editor.
+local function focused()
+	return S ~= nil
+		and S.focused == true
+		and S.drawer_win ~= nil
+		and vim.api.nvim_win_is_valid(S.drawer_win)
+		and vim.api.nvim_get_current_win() == S.drawer_win
 end
 
 local function current()
@@ -136,20 +150,29 @@ local function update_preview()
 end
 
 local function render()
+	if not alive() then
+		return
+	end
 	-- More keys are already waiting (held or repeated key): the last of them
 	-- redraws, so painting now would only be overwritten unseen.
-	if input.pending() then
+	if focused() and input.pending() then
 		return
 	end
 	-- Update the preview *before* the list redraws, otherwise the redraw paints
-	-- the stale preview and it only catches up on the next keypress.
-	update_preview()
+	-- the stale preview and it only catches up on the next keypress. The
+	-- preview belongs to filter mode: parked, a background search may still
+	-- refresh the list, but the float stays away.
+	if focused() then
+		update_preview()
+	elseif preview.is_open() then
+		preview.close()
+	end
 	drawer.render(S, config.get())
 end
 
 --- Fire the active dynamic source's search and apply the results.
 run_search = function()
-	if not active() then
+	if not alive() then
 		return
 	end
 	local session = S
@@ -239,7 +262,7 @@ end
 
 --- (Re)enumerate the current root/source asynchronously and refresh the view.
 function reload()
-	if not active() then
+	if not alive() then
 		return
 	end
 	local cfg = config.get()
@@ -336,18 +359,44 @@ local function go_root()
 	reload()
 end
 
+--- Leave filter mode without tearing the picker down: the drawer stays put
+--- with its list, query and selection, the preview withdraws and the cursor
+--- goes back to the window it entered from. Re-entering the drawer (WinEnter,
+--- `:Loupe`) restores filter mode over the same state.
+function M.park()
+	if not alive() or not S.focused then
+		return
+	end
+	S.focused = false
+	preview.close()
+	if S.guicursor ~= nil then
+		pcall(function()
+			vim.o.guicursor = S.guicursor
+		end)
+	end
+	local back = S.enter_win
+	if not (back and vim.api.nvim_win_is_valid(back)) then
+		back = S.origin_win
+	end
+	if back and vim.api.nvim_win_is_valid(back) and vim.api.nvim_get_current_win() == S.drawer_win then
+		vim.api.nvim_set_current_win(back)
+	end
+end
+
 --- Close the picker and return to the window it was opened from.
 --- `opts.restore_cursor = false` keeps the origin window's current cursor,
 --- used when choosing has already positioned it (see `loupe.source.jump`).
 function M.close(opts)
-	if not active() then
+	if not alive() then
 		return
 	end
 	opts = opts or {}
 	local origin = S.origin_win
 	local guicursor = S.guicursor
 	local cursor = S.origin_cursor
-	S.active = false
+	-- tell the WinClosed guard in `open` that this teardown owns the close
+	S.closing = true
+	S.focused = false
 	cancel_search()
 	if S.search_timer then
 		S.search_timer:close()
@@ -368,6 +417,21 @@ function M.close(opts)
 		if cursor and opts.restore_cursor ~= false then
 			pcall(vim.api.nvim_win_set_cursor, origin, cursor)
 		end
+	end
+end
+
+--- End filter mode after a choose: park (the default) or close. A choose is
+--- anchored to the window loupe was opened from, not to wherever the cursor
+--- last wandered — that is where the file opens, so that is where the cursor
+--- belongs afterwards.
+local function finish(opts)
+	if S and S.origin_win and vim.api.nvim_win_is_valid(S.origin_win) then
+		S.enter_win = S.origin_win
+	end
+	if config.get().close_on_choose then
+		M.close(opts)
+	else
+		M.park()
 	end
 end
 
@@ -406,7 +470,7 @@ local function choose(kind)
 	-- themselves; nil means "fall through".
 	local src = S.source
 	if src.choose then
-		local keep = src.choose(item.cand, kind, { session = S, root = S.root, close = M.close })
+		local keep = src.choose(item.cand, kind, { session = S, root = S.root, close = finish })
 		if keep ~= nil then
 			return keep
 		end
@@ -422,7 +486,7 @@ local function choose(kind)
 	-- Any candidate carrying a line number (grep, symbols, diagnostics) jumps
 	-- to that location, reusing an already-loaded buffer.
 	if item.cand.lnum then
-		return require("loupe.source.jump").choose(item.cand, kind, { session = S, root = S.root, close = M.close })
+		return require("loupe.source.jump").choose(item.cand, kind, { session = S, root = S.root, close = finish })
 	end
 
 	local origin = S.origin_win
@@ -444,11 +508,11 @@ local function choose(kind)
 		vim.bo[bufnr].buflisted = true
 		vim.api.nvim_win_set_buf(origin, bufnr)
 		vim.cmd("redraw")
-		M.close({ restore_cursor = false })
+		finish({ restore_cursor = false })
 		return false
 	end
 
-	M.close()
+	finish()
 	open_buf(bufnr, kind)
 	return false
 end
@@ -469,15 +533,124 @@ local function mouse_select()
 	return true
 end
 
---- Open the picker. `opts.source` picks the initial source by name.
-function M.open(opts)
-	if active() then
-		-- A session whose drawer is gone was torn down from under us; drop it
-		-- rather than refusing to open for the rest of the editor's life.
-		if S.drawer_win and vim.api.nvim_win_is_valid(S.drawer_win) then
+--- Enter filter mode on an existing session: hide the cursor, draw, and run
+--- the key loop. `enter_win` (when given) becomes the window to hand the
+--- cursor back to on park. Called directly when a session is opened, and from
+--- the WinEnter hook when a parked drawer is focused again.
+local function enter_focus(enter_win)
+	if not alive() or S.focused then
+		return
+	end
+	if enter_win and vim.api.nvim_win_is_valid(enter_win) then
+		S.enter_win = enter_win
+	end
+	S.focused = true
+	vim.o.guicursor = "a:LoupeCursor"
+	if vim.api.nvim_get_current_win() ~= S.drawer_win then
+		vim.api.nvim_set_current_win(S.drawer_win)
+	end
+	render()
+	run_loop()
+end
+
+--- Defer filter mode until Neovim is out of the autocmd that moved focus into
+--- the drawer: starting the blocking key loop from inside WinEnter is not safe.
+local function schedule_focus()
+	if not alive() or S.focused or S.in_loop then
+		return
+	end
+	vim.schedule(function()
+		if not alive() or S.focused or S.in_loop then
 			return
 		end
-		M.close()
+		if vim.api.nvim_get_current_win() ~= S.drawer_win then
+			return
+		end
+		enter_focus()
+	end)
+end
+
+run_loop = function()
+	if not alive() or S.in_loop then
+		return
+	end
+	S.in_loop = true
+	-- Whatever happens in the loop, the picker must not be left half-open: the
+	-- drawer and the preview cover the screen and the real cursor is hidden,
+	-- so an error escaping here would look like a frozen editor.
+	local ok, err = pcall(input.run, {
+		state = S,
+		is_focused = focused,
+		render = render,
+		close = M.close,
+		park = M.park,
+		choose = choose,
+		reload = reload,
+		refresh = refresh,
+		move = move,
+		page = page,
+		current = current,
+		set_query = set_query,
+		set_source = set_source,
+		cycle_source = cycle_source,
+		mouse_select = mouse_select,
+		go_parent = go_parent,
+		go_root = go_root,
+	})
+	if alive() then
+		S.in_loop = false
+	end
+	if not ok then
+		if alive() then
+			M.close()
+		end
+		require("loupe.util.notify").scoped("loupe")(tostring(err), vim.log.levels.ERROR)
+		return
+	end
+	-- The loop also ends when focus moves away without an explicit park (a
+	-- mouse click, a `:wincmd`): make the state match what happened.
+	if alive() and S.focused then
+		M.park()
+	end
+end
+
+--- Open the picker. `opts.source` picks the initial source by name.
+---
+--- If a session already exists this focuses it instead of starting over, so
+--- `:Loupe` / a source mapping re-enters a parked drawer with its state (and,
+--- for a cursor-relative source, re-queries from where the cursor now is).
+function M.open(opts)
+	if alive() then
+		-- A session whose drawer is gone was torn down from under us; drop it
+		-- rather than refusing to open for the rest of the editor's life.
+		if not (S.drawer_win and vim.api.nvim_win_is_valid(S.drawer_win)) then
+			M.close()
+		else
+			local enter = vim.api.nvim_get_current_win()
+			if opts and opts.source then
+				local wanted = source.get(opts.source)
+				if wanted then
+					-- Only re-anchor to the cursor when it is in the editor. While
+					-- focused the cursor sits in the drawer, and the snapshot the
+					-- picker was opened from is still the right one.
+					if not S.focused then
+						S.origin_buf = vim.api.nvim_get_current_buf()
+						S.origin_cursor = vim.api.nvim_get_cursor(0)
+					end
+					if wanted ~= S.source then
+						set_source(opts.source)
+					else
+						-- same source: refresh in place (this is how `grr` re-asks
+						-- the server about the symbol under a moved cursor)
+						reload()
+					end
+				end
+			end
+			if not S.focused then
+				enter_focus(enter)
+			end
+			return
+		end
 	end
 	local cfg = config.get()
 	local origin = vim.api.nvim_get_current_win()
@@ -485,7 +658,10 @@ function M.open(opts)
 	local wanted = opts and opts.source
 
 	S = {
-		active = true,
+		focused = false,
+		in_loop = false,
+		enter_win = origin,
+		closing = false,
 		loaded = false,
 		origin_win = origin,
 		origin_buf = vim.api.nvim_win_get_buf(origin),
@@ -533,53 +709,63 @@ function M.open(opts)
 	local height = type(cfg.height) == "function" and cfg.height() or cfg.height
 	local d = drawer.open(height)
 	S.drawer_win, S.list_buf = d.win, d.buf
-	-- hide the real cursor and draw a caret in the prompt instead
+	-- remember the cursor before hiding it; parking puts it back
 	S.guicursor = vim.o.guicursor
-	vim.o.guicursor = "a:LoupeCursor"
 
+	-- Registered only once the drawer exists: the split that created it fires
+	-- WinEnter, and the hook must not see a half-built session.
 	S.augroup = vim.api.nvim_create_augroup("LoupeSession", { clear = true })
 	vim.api.nvim_create_autocmd("VimResized", {
 		group = S.augroup,
 		callback = function()
-			if active() then
-				preview.resize(S.drawer_win)
+			if alive() then
+				if focused() then
+					preview.resize(S.drawer_win)
+				end
 				drawer.render(S, config.get())
+			end
+		end,
+	})
+	-- Focus is the mode switch: entering the drawer starts filter mode, leaving
+	-- it (mouse, `:wincmd`) parks. Remember the last editor window as the place
+	-- to hand the cursor back to.
+	vim.api.nvim_create_autocmd("WinEnter", {
+		group = S.augroup,
+		callback = function()
+			if not alive() then
+				return
+			end
+			local cur = vim.api.nvim_get_current_win()
+			if cur == S.drawer_win then
+				schedule_focus()
+			else
+				S.enter_win = cur
+				if S.focused then
+					M.park()
+				end
+			end
+		end,
+	})
+	vim.api.nvim_create_autocmd("WinClosed", {
+		pattern = tostring(d.win),
+		group = S.augroup,
+		callback = function()
+			if alive() and S.drawer_win == d.win and not S.closing then
+				-- the drawer was closed from under us (`:q`, `:only`)
+				M.close()
 			end
 		end,
 	})
 
 	reload()
-	-- Whatever happens in the loop, the picker must not be left half-open: the
-	-- drawer and the preview cover the screen and the real cursor is hidden,
-	-- so an error escaping here would look like a frozen editor.
-	local ok, err = pcall(input.run, {
-		state = S,
-		is_active = active,
-		render = render,
-		close = M.close,
-		choose = choose,
-		reload = reload,
-		refresh = refresh,
-		move = move,
-		page = page,
-		current = current,
-		set_query = set_query,
-		set_source = set_source,
-		cycle_source = cycle_source,
-		mouse_select = mouse_select,
-		go_parent = go_parent,
-		go_root = go_root,
-	})
-	if not ok then
-		M.close()
-		require("loupe.util.notify").scoped("loupe")(tostring(err), vim.log.levels.ERROR)
-	end
+	enter_focus(origin)
 end
 
---- Toggle the picker.
+--- Toggle filter mode: park a focused picker, focus a parked one, open a
+--- closed one.
 function M.toggle(opts)
-	if active() then
-		M.close()
+	if alive() and S.focused then
+		M.park()
 	else
 		M.open(opts)
 	end
@@ -590,9 +776,14 @@ function M.setup(opts)
 	config.setup(opts)
 end
 
---- Whether the picker is open.
+--- Whether a picker exists (focused or parked).
 function M.is_active()
-	return active()
+	return alive()
+end
+
+--- Whether the picker currently owns the input focus.
+function M.is_focused()
+	return focused()
 end
 
 return M

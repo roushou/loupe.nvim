@@ -74,22 +74,42 @@ vim.api.nvim_create_autocmd("LspAttach", {
 | `<C-r>` | Jump back to the project root |
 | `<BS>` | On an empty query, go up a directory |
 | `<C-p>`/`<C-n>` | Move up/down · `<C-d>`/`<C-u>` page |
-| `<Esc>` / `<C-c>` | Close |
+| `<Esc>` | Park — keep the drawer and its state, return to the editor |
+| `<C-c>` | Close |
 
 `:Loupe [source]` opens a specific source (`:Loupe grep`, `:Loupe symbols`, …).
+
+### Parking
+
+The drawer is persistent. It is a real bottom split, so it keeps its query,
+selection and source while it does not have the cursor. `<Esc>` **parks** it:
+the preview withdraws, the cursor returns to the editor, and every ordinary
+window command applies again. Focus it once more — `<C-w>b`, `<C-w>j` from
+the pane above, or `:Loupe` — and filter mode resumes over the same state.
+`<C-c>` closes it for good, and choosing a file parks it too (set
+`close_on_choose` for the classic "select and it is gone" behaviour).
+
+The preview belongs to filter mode: it is shown only while the drawer has the
+cursor and a row is selected, so moving the cursor out never leaves a float
+covering the editor. Browsing still never opens a file buffer — only the
+choose actions do.
 
 The window bar carries the source tabs and the key that opens the source
 menu; the prompt row carries the source glyph and the count (`shown/total`
 for list sources, `found` for live ones — `+` means the search stopped at
 `max_results`, `…` that it is still running). `<C-o>` marks each tab with its
 key and tints that strip rather than opening anything. Reopening renders the
-last file list at once and refreshes it in the background.
+last file list at once and refreshes it in the background. A parked drawer
+recedes: its window bar uses `StatusLineNC` and its list dims.
 
 ## API
 
 - `require("loupe").setup(opts)` — configure (see below)
-- `.open({ source = "grep" })` — open, optionally on a source
-- `.close()`, `.toggle()`, `.is_active()`
+- `.open({ source = "grep" })` — open, or focus an existing picker, optionally on a source
+- `.park()` — leave filter mode, keeping the drawer and its state
+- `.close()`, `.toggle()`
+- `.is_active()` — whether a picker exists (focused or parked)
+- `.is_focused()` — whether the picker currently has the cursor
 
 Full reference: `:help loupe`.
 
@@ -101,6 +121,7 @@ require("loupe").setup({
   trash = true,          -- delete via the OS trash when available
   frecency = true,       -- order the empty-query list by use
   git = true,            -- show git status markers
+  close_on_choose = false, -- park after opening a file instead of closing
   preview = { diagnostics = true, max_lines = 2000, max_bytes = 1048576 },
   backends = { files = { "fd", "rg", "git" }, grep = { "rg", "git" } },
   mappings = {

@@ -74,6 +74,12 @@ M.defaults = {
 	--- tool is available, files are unlinked and directories are refused.
 	trash = true,
 
+	--- Whether choosing a file tears the picker down or merely parks it. The
+	--- default keeps the drawer (and its query, selection and source) at the
+	--- bottom after a jump, quickfix-style; set to `true` for the classic
+	--- "select and it is gone" behaviour.
+	close_on_choose = false,
+
 	--- Prompt prefix rendered before the query.
 	prompt = "> ",
 
@@ -88,13 +94,16 @@ M.defaults = {
 	--- lhs may be written in any notation Neovim understands (`<C-s>` and
 	--- `<C-S>` are equivalent). Set a value to `false` to unbind a default
 	--- key. Printable characters with no binding are inserted into the query.
+	---
+	--- `park` leaves filter mode but keeps the drawer and its state; `close`
+	--- tears it down. By default `<Esc>` parks and `<C-c>` closes.
 	mappings = {
 		browse = {
 			["<CR>"] = "open",
 			["<C-S>"] = "split",
 			["<C-V>"] = "vsplit",
 			["<C-T>"] = "tab",
-			["<Esc>"] = "close",
+			["<Esc>"] = "park",
 			["<C-C>"] = "close",
 			["<C-O>"] = "sources",
 			["<C-Right>"] = "source_next",

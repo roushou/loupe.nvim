@@ -119,8 +119,10 @@ local function define_highlights()
 	-- tunes StatusLine for exactly this — a strip of chrome across one. A
 	-- border's foreground is picked to be nearly invisible because it only
 	-- ever draws box corners, and every chunk of the bar that sets no colour
-	-- of its own inherits this group's.
+	-- of its own inherits this group's. The parked bar borrows StatusLineNC,
+	-- the theme's own "inactive chrome".
 	vim.api.nvim_set_hl(0, "LoupeBorder", { link = "StatusLine", default = true })
+	vim.api.nvim_set_hl(0, "LoupeBorderNC", { link = "StatusLineNC", default = true })
 	vim.api.nvim_set_hl(0, "LoupeGitMod", { link = "DiagnosticWarn", default = true })
 	vim.api.nvim_set_hl(0, "LoupeGitAdd", { link = "DiagnosticOk", default = true })
 	vim.api.nvim_set_hl(0, "LoupeGitDel", { link = "DiagnosticError", default = true })
@@ -134,6 +136,19 @@ local function define_highlights()
 	vim.api.nvim_set_hl(0, "LoupeGhost", { link = "Comment", default = true })
 	vim.api.nvim_set_hl(0, "LoupeCount", { link = "LineNr", default = true })
 	local bar = chrome()
+	-- a parked drawer recedes: its base text is the theme's own, muted towards
+	-- its background. Explicitly highlighted rows (selection, matches) keep
+	-- their colour, so a parked list still reads as a list, just a quiet one.
+	local normal = resolve("Normal")
+	if normal.fg and normal.bg then
+		vim.api.nvim_set_hl(0, "LoupeDrawerNC", {
+			fg = mute(normal.fg, normal.bg, 0.4),
+			bg = normal.bg,
+			default = true,
+		})
+	else
+		vim.api.nvim_set_hl(0, "LoupeDrawerNC", { link = "Comment", default = true })
+	end
 	-- an inactive tab recedes by being muted chrome text, not by borrowing
 	-- Comment: Comment is built to sit at the edge of legibility so the eye
 	-- skips it, which is right for a hint and wrong for a label to read
@@ -148,7 +163,7 @@ end
 function M.open(height)
 	define_highlights()
 
-	local bufnr = buf.scratch({ bufhidden = "wipe" })
+	local bufnr = buf.scratch({ bufhidden = "hide" })
 
 	vim.cmd(("botright %dsplit"):format(height))
 	local winid = vim.api.nvim_get_current_win()
@@ -167,7 +182,7 @@ function M.open(height)
 		spell = false,
 		list = false,
 		scrolloff = 0,
-		winhighlight = "Normal:Normal,WinBar:LoupeBorder,WinBarNC:LoupeBorder",
+		winhighlight = "Normal:Normal,NormalNC:LoupeDrawerNC,WinBar:LoupeBorder,WinBarNC:LoupeBorderNC",
 		-- claimed up front so the row it costs is in the geometry from the
 		-- first render, before there are tabs to put in it
 		winbar = " ",
@@ -523,7 +538,14 @@ local function winbar_text(session, cfg, width)
 	local function browse_key(action)
 		return M.friendly_key(key_for(maps.browse or {}, action) or "")
 	end
-	local cancel = browse_key("close") .. " cancel"
+	-- `<Esc>` (park) is the key people reach for to cancel the menu; it is
+	-- handled by the menu itself, which closes without parking. If park is
+	-- unbound, fall back to the close key so the hint still names something.
+	local cancel_key = browse_key("park")
+	if cancel_key == "" then
+		cancel_key = browse_key("close")
+	end
+	local cancel = cancel_key .. " cancel"
 
 	local select = session.menu == "sources"
 	local right = root_text(session)
