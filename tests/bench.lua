@@ -125,16 +125,14 @@ local started
 
 local reads = 0
 local queue = {}
--- The empty queue ends a scenario. Filter mode now parks on <Esc>, so an
--- explicit <C-c> (close) is what tears the picker down between scenarios.
-local CLOSE = vim.api.nvim_replace_termcodes("<C-c>", true, false, true)
+local ESC = "\27"
 
 local function key(k)
 	return vim.api.nvim_replace_termcodes(k, true, false, true)
 end
 
 -- Scripted key reader: strings are delivered as keys, functions run in between.
--- An empty queue delivers <C-c> so the session always closes.
+-- An empty queue delivers <Esc> so the session always closes.
 --
 -- `input.read` is the seam, not `getcharstr`: the picker reads keys through a
 -- Vimscript wrapper so CTRL-C cannot abort its loop, and stubbing the wrong
@@ -144,7 +142,7 @@ require("loupe.input").read = function()
 	while true do
 		local item = table.remove(queue, 1)
 		if item == nil then
-			return CLOSE
+			return ESC
 		end
 		if type(item) == "function" then
 			item()

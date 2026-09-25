@@ -26,20 +26,6 @@ A freshly opened picker selects nothing, so the view behind it is left alone:
 the preview appears once you move the selection, type a query or click a row.
 Until then there is no selected row, and the choose actions do nothing.
 
-The drawer is persistent: it is an ordinary bottom split that keeps its query,
-selection and source while it does not have the cursor. `<Esc>` *parks* it —
-the preview withdraws, the cursor returns to the editor and every ordinary
-window command applies again. Focusing the drawer again (`<C-w>b`, `:Loupe`,
-or the mapping that opened it) resumes filter mode over the same state, and
-`<C-c>` closes it for good. Choosing a file parks it too (quickfix-style);
-set `close_on_choose` (see |loupe-configuration|) for the classic "select and
-it is gone" behaviour.
-
-The preview belongs to filter mode: it is shown only while the drawer has the
-cursor and a row is selected, so moving the cursor out of the drawer never
-leaves a float covering the editor. Files are still only opened for real by
-the choose actions.
-
 Requires Neovim 0.11+ and the external tools `fd`, `rg` and `git` (each
 optional; Loupe degrades gracefully). A Nerd Font is needed for the icons.
 
@@ -60,14 +46,7 @@ optional; Loupe degrades gracefully). A Nerd Font is needed for the icons.
 3. COMMANDS                                                 *loupe-commands*
 
 :Loupe [source]         Open the picker, optionally on a specific source, e.g.
-                        `:Loupe grep`, `:Loupe symbols`, `:Loupe buffers`. If a
-                        picker already exists this focuses it: a parked drawer
-                        keeps its state, and asking for the current source again
-                        re-queries it from the cursor's current position.
-
-While the drawer has the cursor, `<Esc>` parks it and `<C-c>` closes it. With
-the cursor elsewhere the drawer is an ordinary window: `<C-w>b` (or `<C-w>j`
-from the pane above) focuses it and restarts filter mode.
+                        `:Loupe grep`, `:Loupe symbols`, `:Loupe buffers`.
 
 Loupe deliberately does not create any global keymaps. Suggested:
 
@@ -118,9 +97,6 @@ servers once for the symbol at the cursor where the picker was opened, then
 fuzzy-filter the locations client-side like `doc_symbols`. They are the
 fuzzy-search counterparts of the default `grr` and `gri` maps; rebind those
 to `loupe.open()` to keep the muscle memory (see |loupe-commands|).
-Re-invoking one of those mappings while the picker is parked focuses it and
-re-queries it from the cursor's new position; focusing the drawer any other
-way keeps the snapshot the picker was opened with.
 
 A source that finds places rather than files draws them in two columns: what
 was found on the left — the matched line, the symbol, the message — and where
@@ -175,7 +151,6 @@ full set.
       git = true,
       frecency = true,
       trash = true,
-      close_on_choose = false,
       prompt = "> ",
       prompt_caret = "▏",
       mappings = { browse = { ... }, sources = { ... } },
@@ -187,10 +162,9 @@ preview, so a file with one enormous line costs no more than a normal one.
 
 Mappings are grouped by context: `browse` (the result list) and `sources`
 (the `<C-o>` source menu). A `browse` value names a built-in action (`open`,
-`down`, `split`, `page_up`, `park`, `close`, ...); a `sources` value names a
-source. By default `<Esc>` is `park` and `<C-c>` is `close`. Keys may use any
-notation Neovim understands (`<C-s>` == `<C-S>`); set a value to `false` to
-unbind, and note that `<C-j>`/`<C-m>` resolve to `<NL>`/`<CR>`.
+`down`, `split`, `page_up`, ...); a `sources` value names a source. Keys may
+use any notation Neovim understands (`<C-s>` == `<C-S>`); set a value to
+`false` to unbind, and note that `<C-j>`/`<C-m>` resolve to `<NL>`/`<CR>`.
 
 ==============================================================================
 6. HEALTH                                                     *loupe-health*
@@ -205,19 +179,14 @@ resolved project root.
 7. LUA API                                                       *loupe-api*
 
 loupe.setup({opts})         Configure. See |loupe-configuration|.
-loupe.open({opts})          Open. `opts.source` selects the initial source;
-                            an existing picker is focused instead of rebuilt.
-loupe.park()                Leave filter mode, keeping the drawer and state.
-loupe.close()               Close for good.
-loupe.toggle({opts})        Park when focused, focus or open otherwise.
-loupe.is_active()           Whether a picker exists (focused or parked).
-loupe.is_focused()          Whether the picker currently has the cursor.
+loupe.open({opts})          Open. `opts.source` selects the initial source.
+loupe.close()               Close.
+loupe.toggle({opts})        Toggle.
+loupe.is_active()           Whether the picker is open.
 
-While the drawer has the cursor, `<Esc>` parks it and `<C-c>` closes it;
-both are ordinary mappings (see |loupe-configuration|) so either can be
-rebound. Keys are read from inside a `:try` block, without which Neovim's
-interrupt would abort the picker's key loop part-way and leave the drawer,
-the preview and the hidden cursor behind.
+`<C-c>` closes the picker like `<Esc>`. Keys are read from inside a `:try`
+block, without which Neovim's interrupt would abort the picker's key loop
+part-way and leave the drawer, the preview and the hidden cursor behind.
 
 ==============================================================================
 8. HIGHLIGHTS                                             *loupe-highlights*
@@ -245,8 +214,6 @@ so a colourscheme applies without configuration. Override any of them:
   LoupeCount          LineNr              the result count
   LoupeEmpty          Comment             the "no matches" line
   LoupeBorder         StatusLine          the window bar
-  LoupeBorderNC       StatusLineNC        the window bar when parked
-  LoupeDrawerNC       computed            the list while parked
   LoupeGitAdd         DiagnosticOk        git: added
   LoupeGitMod         DiagnosticWarn      git: modified
   LoupeGitDel         DiagnosticError     git: deleted or conflicted

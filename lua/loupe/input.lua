@@ -8,10 +8,9 @@
 --- names (see `loupe.keymap` and the defaults in `loupe.config`). Each context
 --- below is a thin interpreter over that map.
 ---
---- `ctx` fields: `state` (session table), `is_focused`, `render`, `close`,
---- `park`, `choose`, `reload`, `refresh`, `move`, `page`, `current`,
---- `set_query`, `set_source`, `cycle_source`, `mouse_select`, `go_parent`,
---- `go_root`.
+--- `ctx` fields: `state` (session table), `is_active`, `render`, `close`,
+--- `choose`, `reload`, `refresh`, `move`, `page`, `current`, `set_query`,
+--- `set_source`, `cycle_source`, `mouse_select`, `go_parent`, `go_root`.
 
 local tf = require("loupe.util.textfield")
 local config = require("loupe.config")
@@ -49,9 +48,6 @@ local function handle_browse(ctx, map, ch, key)
 		return not ctx.choose("edit")
 	elseif action == "close" then
 		ctx.close()
-		return true
-	elseif action == "park" then
-		ctx.park()
 		return true
 	elseif action == "split" then
 		return not ctx.choose("split")
@@ -143,13 +139,11 @@ function M.pending()
 	return vim.fn.getchar(1) ~= 0
 end
 
---- Run the blocking key loop until the picker leaves filter mode (parked or
---- closed). Parking keeps the session alive; the loop is restarted when the
---- drawer is focused again.
+--- Run the blocking key loop until the picker closes.
 function M.run(ctx)
 	local maps = keymap.resolve(config.get().mappings)
 	ctx.render()
-	while ctx.is_focused() do
+	while ctx.is_active() do
 		local ch = M.read()
 		if ch == "" then
 			ctx.close()

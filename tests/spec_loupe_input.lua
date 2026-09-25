@@ -77,7 +77,7 @@ h.test("opening again recovers from a session whose drawer is gone", function()
 	local opened = false
 	vim.fn.LoupeGetChar = function()
 		opened = true
-		return vim.keycode("<C-C>")
+		return vim.keycode("<Esc>")
 	end
 	session.open()
 	vim.fn.LoupeGetChar = real
@@ -88,7 +88,7 @@ end)
 h.test("the source keys step along the tab strip", function()
 	local real = vim.fn.LoupeGetChar
 	local seen = {}
-	local keys = { vim.keycode("<C-Right>"), vim.keycode("<C-Right>"), vim.keycode("<C-Left>"), vim.keycode("<C-C>") }
+	local keys = { vim.keycode("<C-Right>"), vim.keycode("<C-Right>"), vim.keycode("<C-Left>"), vim.keycode("<Esc>") }
 	local at = 0
 	vim.fn.LoupeGetChar = function()
 		-- the window bar says which source is active when each key is read
@@ -99,7 +99,7 @@ h.test("the source keys step along the tab strip", function()
 			end
 		end
 		at = at + 1
-		return keys[at] or vim.keycode("<C-C>")
+		return keys[at] or vim.keycode("<Esc>")
 	end
 	session.open()
 	vim.fn.LoupeGetChar = real
@@ -138,7 +138,7 @@ local function preview_at(keys)
 	vim.fn.LoupeGetChar = function()
 		seen[#seen + 1] = preview.is_open()
 		at = at + 1
-		return keys[at] or vim.keycode("<C-C>")
+		return keys[at] or vim.keycode("<Esc>")
 	end
 	local ok, err = pcall(session.open, { source = "_resting" })
 	vim.fn.LoupeGetChar = real
@@ -156,151 +156,6 @@ h.test("typing a query aims the selection", function()
 	local seen = preview_at({ "r" })
 	h.eq(seen[1], false)
 	h.eq(seen[2], true, "a typed query left the picker resting")
-end)
-
-h.test("<Esc> parks: the drawer and its state survive, the preview withdraws", function()
-	local real = vim.fn.LoupeGetChar
-	local preview = require("loupe.preview")
-	local keys = { vim.keycode("<C-N>"), vim.keycode("<Esc>") }
-	local at = 0
-	vim.fn.LoupeGetChar = function()
-		at = at + 1
-		return keys[at] or vim.keycode("<C-C>")
-	end
-	local ok, err = pcall(session.open, { source = "_resting" })
-	vim.fn.LoupeGetChar = real
-	h.ok(ok, tostring(err))
-
-	h.eq(at, 2, "the loop read past <Esc>: it did not park")
-	h.eq(session.is_active(), true, "<Esc> closed the picker instead of parking it")
-	h.eq(session.is_focused(), false, "the parked picker still owns focus")
-	h.eq(preview.is_open(), false, "the preview stayed up after parking")
-
-	session.close()
-	h.eq(session.is_active(), false, "close() left the session alive")
-end)
-
-h.test("re-entering a parked picker restores the preview over the same selection", function()
-	local real = vim.fn.LoupeGetChar
-	local preview = require("loupe.preview")
-	-- first pass: aim at a row, then park
-	local at = 0
-	vim.fn.LoupeGetChar = function()
-		at = at + 1
-		return (at == 1 and vim.keycode("<C-N>")) or vim.keycode("<Esc>")
-	end
-	pcall(session.open, { source = "_resting" })
-	h.eq(session.is_active(), true, "parking dropped the session")
-	h.eq(preview.is_open(), false, "parking left the preview up")
-
-	-- second pass: :Loupe with no source focuses the same session
-	local restored
-	vim.fn.LoupeGetChar = function()
-		restored = preview.is_open()
-		return vim.keycode("<C-C>")
-	end
-	pcall(session.open)
-	vim.fn.LoupeGetChar = real
-
-	h.eq(restored, true, "re-entering did not restore the preview")
-	h.eq(session.is_active(), false, "<C-c> did not close the picker")
-end)
-
-h.test("<C-c> closes the picker outright", function()
-	local real = vim.fn.LoupeGetChar
-	local before = vim.o.guicursor
-	vim.fn.LoupeGetChar = function()
-		return vim.keycode("<C-C>")
-	end
-	local ok, err = pcall(session.open, { source = "_resting" })
-	vim.fn.LoupeGetChar = real
-	h.ok(ok, tostring(err))
-	h.eq(session.is_active(), false, "<C-c> did not close the picker")
-	h.eq(vim.o.guicursor, before, "the real cursor was left hidden")
-end)
-
-h.test("focusing a parked drawer restarts filter mode", function()
-	local real = vim.fn.LoupeGetChar
-	-- open, aim at a row, park
-	local at = 0
-	vim.fn.LoupeGetChar = function()
-		at = at + 1
-		return (at == 1 and vim.keycode("<C-N>")) or vim.keycode("<Esc>")
-	end
-	pcall(session.open, { source = "_resting" })
-	h.eq(session.is_active(), true, "parking dropped the session")
-
-	-- the parked drawer is still on screen, but not focused
-	local drawer
-	for _, w in ipairs(vim.api.nvim_list_wins()) do
-		if (vim.wo[w].winbar or ""):find("LoupeTab", 1, true) then
-			drawer = w
-			break
-		end
-	end
-	h.ok(drawer ~= nil, "the parked drawer is gone")
-	h.ok(vim.api.nvim_get_current_win() ~= drawer, "parking left the drawer focused")
-
-	-- focusing it (as <C-w>b would) must restart the key loop
-	local read = false
-	vim.fn.LoupeGetChar = function()
-		read = true
-		return vim.keycode("<C-C>")
-	end
-	vim.api.nvim_set_current_win(drawer)
-	local pumped = vim.wait(500, function()
-		return read
-	end, 5)
-	vim.fn.LoupeGetChar = real
-	if session.is_active() then
-		session.close()
-	end
-	h.ok(pumped, "focusing the parked drawer did not restart the key loop")
-	h.eq(session.is_active(), false, "<C-c> did not close the restarted picker")
-end)
-
-h.test("closing the drawer from outside tears the session down", function()
-	local real = vim.fn.LoupeGetChar
-	local at = 0
-	vim.fn.LoupeGetChar = function()
-		at = at + 1
-		return (at == 1 and vim.keycode("<C-N>")) or vim.keycode("<Esc>")
-	end
-	pcall(session.open, { source = "_resting" })
-	vim.fn.LoupeGetChar = real
-	h.eq(session.is_active(), true, "parking dropped the session")
-
-	local drawer
-	for _, w in ipairs(vim.api.nvim_list_wins()) do
-		if (vim.wo[w].winbar or ""):find("LoupeTab", 1, true) then
-			drawer = w
-			break
-		end
-	end
-	h.ok(drawer ~= nil, "the parked drawer is gone")
-	vim.api.nvim_win_close(drawer, true)
-	h.eq(session.is_active(), false, "closing the drawer from outside left the session alive")
-end)
-
-h.test("close_on_choose closes the picker after opening a file", function()
-	local config = require("loupe.config")
-	config.values = nil
-	config.setup({ close_on_choose = true })
-	local real = vim.fn.LoupeGetChar
-	local origin = vim.api.nvim_get_current_win()
-	local restore = vim.api.nvim_win_get_buf(origin)
-	local keys = { vim.keycode("<C-N>"), vim.keycode("<CR>") }
-	local at = 0
-	vim.fn.LoupeGetChar = function()
-		at = at + 1
-		return keys[at] or vim.keycode("<C-C>")
-	end
-	local ok, err = pcall(session.open, { source = "_resting" })
-	vim.fn.LoupeGetChar = real
-	vim.api.nvim_win_set_buf(origin, restore)
-	config.values = nil
-	h.ok(ok, tostring(err))
-	h.eq(session.is_active(), false, "close_on_choose left the picker open")
 end)
 
 h.test("the chosen file is in the window before the chrome comes down", function()
@@ -339,7 +194,6 @@ h.test("the chosen file is in the window before the chrome comes down", function
 		seen:find("README.md", 1, true) ~= nil,
 		"the window still held " .. vim.fn.fnamemodify(seen, ":t") .. " when the picker started closing"
 	)
-	session.close()
 end)
 
 -- A source whose candidates all live in one file, the shape grep and symbols
@@ -375,7 +229,6 @@ h.test("a file opened by jumping to a location counts as opened", function()
 	vim.fn.LoupeGetChar = real
 	vim.api.nvim_win_set_buf(origin, restore)
 	h.ok(ok, tostring(err))
-	session.close()
 
 	local seen = vim.tbl_map(function(c)
 		return c.abs
