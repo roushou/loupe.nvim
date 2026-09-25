@@ -119,7 +119,10 @@ M.defaults = {
 			["<ScrollWheelDown>"] = "scroll_down",
 			["<BS>"] = "backspace",
 			["<Del>"] = "delete",
-			["<C-W>"] = "delete_word",
+			["<M-BS>"] = "delete_word",
+			-- window prefix while the drawer has the cursor: <C-w> + h/j/k/l/w/...
+			-- runs the matching `:wincmd` and parks loupe as focus leaves
+			["<C-W>"] = "window",
 			["<Left>"] = "caret_left",
 			["<C-B>"] = "caret_left",
 			["<Right>"] = "caret_right",

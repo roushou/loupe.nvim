@@ -34,6 +34,12 @@ h.test("the close mapping covers the key CTRL-C arrives as", function()
 	h.eq(maps.browse[vim.fn.keytrans("\3")], "close")
 end)
 
+h.test("the word-delete key is <M-BS> and <C-w> is the window prefix", function()
+	local maps = require("loupe.keymap").resolve(require("loupe.config").get().mappings)
+	h.eq(maps.browse[vim.fn.keytrans(vim.keycode("<M-BS>"))], "delete_word")
+	h.eq(maps.browse[vim.fn.keytrans(vim.keycode("<C-W>"))], "window")
+end)
+
 h.test("read reports the end of the input stream as an empty key", function()
 	local real = vim.fn.LoupeGetChar
 	vim.fn.LoupeGetChar = function()
@@ -257,6 +263,62 @@ h.test("focusing a parked drawer restarts filter mode", function()
 	end
 	h.ok(pumped, "focusing the parked drawer did not restart the key loop")
 	h.eq(session.is_active(), false, "<C-c> did not close the restarted picker")
+end)
+
+--- The prompt row of the on-screen drawer, or nil when there is none.
+local function drawer_prompt()
+	for _, w in ipairs(vim.api.nvim_list_wins()) do
+		if (vim.wo[w].winbar or ""):find("LoupeTab", 1, true) then
+			local bufnr = vim.api.nvim_win_get_buf(w)
+			return vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1] or ""
+		end
+	end
+	return nil
+end
+
+h.test("<M-BS> deletes the word before the caret in the query", function()
+	local real = vim.fn.LoupeGetChar
+	local keys = { "a", "b", "c", " ", "d", "e", vim.keycode("<M-BS>"), vim.keycode("<C-C>") }
+	local at, prompt = 0, nil
+	vim.fn.LoupeGetChar = function()
+		at = at + 1
+		if at == 8 then
+			prompt = drawer_prompt()
+		end
+		return keys[at] or vim.keycode("<C-C>")
+	end
+	local ok, err = pcall(session.open, { source = "_resting" })
+	vim.fn.LoupeGetChar = real
+	if session.is_active() then
+		session.close()
+	end
+	h.ok(ok, tostring(err))
+	h.ok(prompt ~= nil, "the drawer prompt could not be read")
+	h.ok(prompt:find("abc", 1, true) ~= nil, "the query lost text before the word delete: " .. tostring(prompt))
+	h.ok(prompt:find("de", 1, true) == nil, "<M-BS> did not delete the word: " .. tostring(prompt))
+end)
+
+h.test("<C-w> in the drawer runs a window command and parks", function()
+	local real = vim.fn.LoupeGetChar
+	local origin = vim.api.nvim_get_current_win()
+	local keys = { vim.keycode("<C-N>"), vim.keycode("<C-W>"), "k", vim.keycode("<C-C>") }
+	local at = 0
+	vim.fn.LoupeGetChar = function()
+		at = at + 1
+		return keys[at] or vim.keycode("<C-C>")
+	end
+	local ok, err = pcall(session.open, { source = "_resting" })
+	vim.fn.LoupeGetChar = real
+	local parked = session.is_active()
+	local still_focused = session.is_focused()
+	local focused_win = vim.api.nvim_get_current_win()
+	if session.is_active() then
+		session.close()
+	end
+	h.ok(ok, tostring(err))
+	h.ok(parked, "the picker was torn down instead of parked")
+	h.eq(still_focused, false, "<C-w>k did not park the picker")
+	h.eq(focused_win, origin, "<C-w>k did not move to the window above")
 end)
 
 h.test("closing the drawer from outside tears the session down", function()

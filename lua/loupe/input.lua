@@ -41,6 +41,27 @@ local function handle_sources(ctx, map, key)
 	end
 end
 
+--- One `<C-w>` window command: read the key after the prefix and run it as
+--- `:wincmd`. `<C-w><C-w>` is Neovim's own "next window"; any key that is not
+--- a plain character is ignored. Moving focus out of the drawer fires the
+--- session's WinEnter hook, which parks loupe.
+local function run_window_cmd()
+	local ch = M.read()
+	if ch == "" then
+		return
+	end
+	local key = vim.fn.keytrans(ch)
+	local arg
+	if key == "<C-W>" then
+		arg = "w"
+	elseif #key == 1 then
+		arg = key
+	end
+	if arg then
+		pcall(vim.cmd, "wincmd " .. arg)
+	end
+end
+
 --- One browse key. Returns true when the picker should quit.
 local function handle_browse(ctx, map, ch, key)
 	local S = ctx.state
@@ -87,6 +108,8 @@ local function handle_browse(ctx, map, ch, key)
 		ctx.move(-ctx.page())
 	elseif action == "delete_word" then
 		ctx.set_query(tf.delete_word(S.query, S.caret))
+	elseif action == "window" then
+		run_window_cmd()
 	elseif action == "backspace" then
 		if S.query == "" then
 			ctx.go_parent()

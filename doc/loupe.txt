@@ -69,6 +69,12 @@ While the drawer has the cursor, `<Esc>` parks it and `<C-c>` closes it. With
 the cursor elsewhere the drawer is an ordinary window: `<C-w>b` (or `<C-w>j`
 from the pane above) focuses it and restarts filter mode.
 
+The same `<C-w>` prefix works from inside the drawer: `<C-w>h/j/k/l/w/...` runs
+the matching `:wincmd` and parks loupe as focus leaves, so window navigation
+is never more than one prefix away. `<C-w><C-w>` moves to the next window. The
+word-delete key is `<M-BS>` (Alt-Backspace, readline's `backward-kill-word`),
+not `<C-w>`, which the prefix now owns.
+
 Loupe deliberately does not create any global keymaps. Suggested:
 
 >lua
@@ -187,10 +193,10 @@ preview, so a file with one enormous line costs no more than a normal one.
 
 Mappings are grouped by context: `browse` (the result list) and `sources`
 (the `<C-o>` source menu). A `browse` value names a built-in action (`open`,
-`down`, `split`, `page_up`, `park`, `close`, ...); a `sources` value names a
-source. By default `<Esc>` is `park` and `<C-c>` is `close`. Keys may use any
-notation Neovim understands (`<C-s>` == `<C-S>`); set a value to `false` to
-unbind, and note that `<C-j>`/`<C-m>` resolve to `<NL>`/`<CR>`.
+`down`, `split`, `page_up`, `park`, `close`, `window`, ...); a `sources` value
+names a source. By default `<Esc>` is `park` and `<C-c>` is `close`. Keys may
+use any notation Neovim understands (`<C-s>` == `<C-S>`); set a value to
+`false` to unbind, and note that `<C-j>`/`<C-m>` resolve to `<NL>`/`<CR>`.
 
 ==============================================================================
 6. HEALTH                                                     *loupe-health*
