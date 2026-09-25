@@ -278,7 +278,12 @@ function reload()
 	drawer.render(S, cfg)
 	vim.cmd("redraw")
 
-	source.load(src, { root = root, buf = session.origin_buf, name = src.name }, function(cands)
+	source.load(src, {
+		root = root,
+		buf = session.origin_buf,
+		cursor = session.origin_cursor,
+		name = src.name,
+	}, function(cands)
 		if cfg.frecency and src.name == "files" then
 			cands = frecency.sort(cands)
 		end

@@ -103,3 +103,160 @@ h.test("jump keeps the preview view after the drawer closes", function()
 	h.eq(v.topline, preview_top)
 	h.eq(v.lnum, 40)
 end)
+
+--- Run an LSP list op against a fake client and capture what it produced.
+local function lsp_list(op, ctx, client, method)
+	local lsp = require("loupe.backend").registry.lsp
+	local real = vim.lsp.get_clients
+	local got
+	local ok, err = pcall(function()
+		vim.lsp.get_clients = function()
+			return { client }
+		end
+		lsp.list[op](ctx, function(cands, done)
+			got = { cands, done }
+		end)
+		if method then
+			vim.wait(500, function()
+				return got ~= nil
+			end)
+		end
+	end)
+	vim.lsp.get_clients = real
+	if not ok then
+		error(err)
+	end
+	return got
+end
+
+h.test("references asks at the captured cursor, dedupes and sorts locations", function()
+	local dir = tmpdir()
+	local a = dir .. "/a.lua"
+	local b = dir .. "/sub/b.lua"
+	vim.fn.mkdir(dir .. "/sub", "p")
+	vim.fn.writefile({ "one", "two", "three" }, a)
+	vim.fn.writefile({ "alpha" }, b)
+
+	local seen
+	local client = {
+		supports_method = function(_, method)
+			return method == "textDocument/references"
+		end,
+		request = function(_, method, params, handler)
+			seen = { method = method, params = params }
+			handler(nil, {
+				{ uri = vim.uri_from_fname(a), range = { start = { line = 2, character = 4 } } },
+				{ uri = vim.uri_from_fname(b), range = { start = { line = 0, character = 1 } } },
+				-- the same location again: it must be collapsed
+				{ uri = vim.uri_from_fname(a), range = { start = { line = 2, character = 4 } } },
+			})
+			return true
+		end,
+	}
+	local got = lsp_list("references", { buf = 0, root = dir, cursor = { 5, 7 } }, client, true)
+
+	h.eq(seen.method, "textDocument/references")
+	h.eq(seen.params.position, { line = 4, character = 7 }, "cursor is 1-based and becomes 0-based")
+	h.ok(seen.params.context and seen.params.context.includeDeclaration, "declaration must be included")
+	h.eq(#got[1], 2, "the duplicate location must be collapsed")
+	h.eq(got[1][1].rel, "a.lua")
+	h.eq(got[1][1].text, "three")
+	h.eq(got[1][1].meta, "a.lua:3")
+	h.eq(got[1][1].label, "three  a.lua:3")
+	h.eq(got[1][1].lnum, 3)
+	h.eq(got[1][1].col, 4)
+	h.eq(got[1][2].rel, "sub/b.lua")
+	h.eq(got[1][2].text, "alpha")
+	h.eq(got[2], true)
+end)
+
+h.test("implementations accepts a bare Location and a LocationLink", function()
+	local dir = tmpdir()
+	local a = dir .. "/impl.lua"
+	vim.fn.writefile({ "x", "y" }, a)
+
+	local client = {
+		supports_method = function(_, method)
+			return method == "textDocument/implementation"
+		end,
+		request = function(_, _, _, handler)
+			handler(nil, {
+				-- a bare Location rather than a list of them
+				{ uri = vim.uri_from_fname(a), range = { start = { line = 1, character = 0 } } },
+				-- a LocationLink points at its target instead, and its selection
+				-- range wins over the (wider) target range
+				{
+					targetUri = vim.uri_from_fname(a),
+					targetRange = { start = { line = 0, character = 0 } },
+					targetSelectionRange = { start = { line = 0, character = 4 } },
+				},
+			})
+			return true
+		end,
+	}
+	local got = lsp_list("implementations", { buf = 0, root = dir, cursor = { 1, 0 } }, client, true)
+
+	h.eq(#got[1], 2)
+	h.eq(got[1][1].meta, "impl.lua:1")
+	h.eq(got[1][1].text, "x")
+	h.eq(got[1][1].col, 4, "the selection range is preferred over the whole target range")
+	h.eq(got[1][2].meta, "impl.lua:2")
+	h.eq(got[1][2].text, "y")
+end)
+
+h.test("references is empty when no client supports the method", function()
+	local client = {
+		supports_method = function()
+			return false
+		end,
+		request = function()
+			error("a request must not be sent to an unqualified client")
+		end,
+	}
+	local got = lsp_list("references", { buf = 0, root = "/r", cursor = { 1, 0 } }, client, false)
+	h.eq(got, { {}, true })
+end)
+
+h.test("the references source resolves to the lsp backend with the corner cursor", function()
+	local source = require("loupe.source")
+	local dir = tmpdir()
+	local a = dir .. "/a.lua"
+	vim.fn.writefile({ "hello" }, a)
+
+	local real = vim.lsp.get_clients
+	local seen
+	local client = {
+		supports_method = function(_, method)
+			return method == "textDocument/references"
+		end,
+		request = function(_, _, params, handler)
+			seen = params
+			handler(nil, { { uri = vim.uri_from_fname(a), range = { start = { line = 0, character = 0 } } } })
+			return true
+		end,
+	}
+	local got
+	local ok, err = pcall(function()
+		vim.lsp.get_clients = function()
+			return { client }
+		end
+		source.load(source.get("references"), {
+			root = dir,
+			buf = 0,
+			cursor = { 3, 1 },
+			name = "references",
+		}, function(cands, done)
+			got = { cands, done }
+		end)
+		vim.wait(500, function()
+			return got ~= nil
+		end)
+	end)
+	vim.lsp.get_clients = real
+	if not ok then
+		error(err)
+	end
+	h.eq(seen.position, { line = 2, character = 1 })
+	h.eq(got[1][1].text, "hello")
+	h.eq(got[2], true)
+end)

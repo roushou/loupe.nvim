@@ -29,6 +29,8 @@ h.test("resolve maps every context", function()
 	h.eq(maps.sources["g"], "grep")
 	h.eq(maps.sources["s"], "symbols")
 	h.eq(maps.sources["t"], "doc_symbols")
+	h.eq(maps.sources["u"], "references")
+	h.eq(maps.sources["i"], "implementations")
 	h.eq(maps.sources["e"], "diagnostics")
 end)
 

@@ -12,7 +12,7 @@ behind it is left alone until you move the selection, type a query or click a
 row.
 
 ```
-f files · d dirs · b buffers · r recent · c changed · g grep · s symbols · t doc_symbols · e diagnostics
+f files · d dirs · b buffers · r recent · c changed · g grep · s symbols · t doc_symbols · u references · i implementations · e diagnostics
 ```
 
 ## Requirements
@@ -53,6 +53,14 @@ Loupe creates **no keymaps**. Suggested:
 vim.keymap.set("n", "<C-p>", function() require("loupe").open() end, { desc = "Find files" })
 vim.keymap.set("n", "<leader>fw", function() require("loupe").open({ source = "grep" }) end)
 vim.keymap.set("n", "<leader>ss", function() require("loupe").open({ source = "doc_symbols" }) end)
+-- LSP, cursor-relative: references and implementations
+vim.api.nvim_create_autocmd("LspAttach", {
+  callback = function(ev)
+    local o = { buffer = ev.buf }
+    vim.keymap.set("n", "grr", function() require("loupe").open({ source = "references" }) end, o)
+    vim.keymap.set("n", "gri", function() require("loupe").open({ source = "implementations" }) end, o)
+  end,
+})
 ```
 
 ## Usage
@@ -132,9 +140,9 @@ vim.api.nvim_set_hl(0, "LoupeSelection", { link = "CursorLine" })
 ## Dependencies
 
 Loupe integrates with `mini.icons` (file/symbol icons) and `fff` (an optional
-fuzzy-search engine) when available, and uses LSP for the `symbols` and
-`doc_symbols` sources. All are optional. Run `:checkhealth loupe` to see what
-was detected.
+fuzzy-search engine) when available, and uses LSP for the `symbols`,
+`doc_symbols`, `references` and `implementations` sources. All are optional.
+Run `:checkhealth loupe` to see what was detected.
 
 ## Development
 

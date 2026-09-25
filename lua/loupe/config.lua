@@ -42,6 +42,8 @@ M.defaults = {
 		grep = { "rg", "git" },
 		symbols = { "lsp" },
 		doc_symbols = { "lsp" },
+		references = { "lsp" },
+		implementations = { "lsp" },
 		diagnostics = { "nvim" },
 	},
 
@@ -127,6 +129,8 @@ M.defaults = {
 			["g"] = "grep",
 			["s"] = "symbols",
 			["t"] = "doc_symbols",
+			["u"] = "references",
+			["i"] = "implementations",
 			["e"] = "diagnostics",
 		},
 	},

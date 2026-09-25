@@ -23,7 +23,7 @@ local CAPABILITIES = {
 	"grep",
 	"buffers",
 	"diagnostics",
-	"symbols",
+	"lsp",
 	"recent",
 }
 

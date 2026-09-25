@@ -22,8 +22,17 @@ return {
 	--- Attached language servers, so availability is dynamic.
 	lsp = {
 		available = function()
-			return #vim.lsp.get_clients({ method = "workspace/symbol" }) > 0
-				or #vim.lsp.get_clients({ method = "textDocument/documentSymbol" }) > 0
+			for _, method in ipairs({
+				"workspace/symbol",
+				"textDocument/documentSymbol",
+				"textDocument/references",
+				"textDocument/implementation",
+			}) do
+				if #vim.lsp.get_clients({ method = method }) > 0 then
+					return true
+				end
+			end
+			return false
 		end,
 	},
 }

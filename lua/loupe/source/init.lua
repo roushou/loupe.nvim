@@ -26,8 +26,9 @@ function M.get(name)
 	return M.registry[name]
 end
 
---- Load candidates for `source`. `ctx` is `{ root, buf, name }`.
---- Calls `cb(cands, ok, backend_id)`.
+--- Load candidates for `source`. `ctx` is `{ root, buf, cursor, name }`, where
+--- `cursor` is the 1-based position of the cursor the picker was opened from
+--- (used by cursor-relative LSP sources). Calls `cb(cands, ok, backend_id)`.
 function M.load(source, ctx, cb)
 	if type(source.list) == "function" then
 		source.list(ctx, cb)
@@ -77,6 +78,8 @@ M.register(require("loupe.source.changed"))
 M.register(require("loupe.source.grep"))
 M.register(require("loupe.source.symbols"))
 M.register(require("loupe.source.doc_symbols"))
+M.register(require("loupe.source.references"))
+M.register(require("loupe.source.implementations"))
 M.register(require("loupe.source.diagnostics"))
 
 return M

@@ -58,6 +58,17 @@ Loupe deliberately does not create any global keymaps. Suggested:
     vim.keymap.set("n", "<leader>ss", function()
       require("loupe").open({ source = "doc_symbols" })
     end)
+    vim.api.nvim_create_autocmd("LspAttach", {
+      callback = function(ev)
+        local o = { buffer = ev.buf }
+        vim.keymap.set("n", "grr", function()
+          require("loupe").open({ source = "references" })
+        end, o)
+        vim.keymap.set("n", "gri", function()
+          require("loupe").open({ source = "implementations" })
+        end, o)
+      end,
+    })
 <
 
 ==============================================================================
@@ -66,18 +77,26 @@ Loupe deliberately does not create any global keymaps. Suggested:
 Switch sources with the source menu (`<C-o>`), or step along the tab strip
 with `<C-Right>` and `<C-Left>`, which wrap at both ends.
 
-  f  files          `fd` -> `rg` -> `git`      project files
-  d  dirs           `fd`                        directories; <CR> descends
-  b  buffers        builtin                     open buffers
-  r  recent         frecency store              recently/frequently opened
-  c  changed        `git status`                staged/unstaged/untracked
-  g  grep           `rg` -> `git grep`          live content search
-  s  symbols        LSP workspace/symbol        live
-  t  doc_symbols    LSP textDocument/documentSymbol
-  e  diagnostics    vim.diagnostic
+  f  files           `fd` -> `rg` -> `git`     project files
+  d  dirs            `fd`                      directories; <CR> descends
+  b  buffers         builtin                   open buffers
+  r  recent          frecency store            recently/frequently opened
+  c  changed         `git status`              staged/unstaged/untracked
+  g  grep            `rg` -> `git grep`        live content search
+  s  symbols         LSP workspace/symbol      live
+  t  doc_symbols     LSP textDocument/documentSymbol
+  u  references      LSP textDocument/references
+  i  implementations LSP textDocument/implementation
+  e  diagnostics     vim.diagnostic
 
 `grep` and `symbols` re-query on each keystroke (debounced); the preview jumps
 to the match. Choosing a symbol or diagnostic jumps to its location.
+
+`references` and `implementations` are cursor-relative: they ask the language
+servers once for the symbol at the cursor where the picker was opened, then
+fuzzy-filter the locations client-side like `doc_symbols`. They are the
+fuzzy-search counterparts of the default `grr` and `gri` maps; rebind those
+to `loupe.open()` to keep the muscle memory (see |loupe-commands|).
 
 A source that finds places rather than files draws them in two columns: what
 was found on the left — the matched line, the symbol, the message — and where
@@ -134,16 +153,18 @@ full set.
       trash = true,
       prompt = "> ",
       prompt_caret = "▏",
-      mappings = { browse = { ... }, menu = { ... }, sources = { ... }, prompt = { ... } },
+      mappings = { browse = { ... }, sources = { ... } },
     })
 <
 
 `preview.max_lines` and `preview.max_bytes` bound what is read into the
 preview, so a file with one enormous line costs no more than a normal one.
 
-Mappings are grouped by context: `browse` (result list) and `sources` (the
-`<C-o>` source menu). Keys may use any notation Neovim understands
-(`<C-s>` == `<C-S>`).
+Mappings are grouped by context: `browse` (the result list) and `sources`
+(the `<C-o>` source menu). A `browse` value names a built-in action (`open`,
+`down`, `split`, `page_up`, ...); a `sources` value names a source. Keys may
+use any notation Neovim understands (`<C-s>` == `<C-S>`); set a value to
+`false` to unbind, and note that `<C-j>`/`<C-m>` resolve to `<NL>`/`<CR>`.
 
 ==============================================================================
 6. HEALTH                                                     *loupe-health*

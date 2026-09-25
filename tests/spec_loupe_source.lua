@@ -11,6 +11,8 @@ h.test("built-in sources are registered", function()
 		"grep",
 		"symbols",
 		"doc_symbols",
+		"references",
+		"implementations",
 		"diagnostics",
 	}) do
 		local s = source.get(name)

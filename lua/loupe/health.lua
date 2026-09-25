@@ -51,12 +51,19 @@ function M.check()
 		{ "grep", "search" },
 		{ "symbols", "search" },
 		{ "doc_symbols", "list" },
+		{ "references", "list" },
+		{ "implementations", "list" },
 		{ "diagnostics", "list" },
 	}) do
 		local id = backend.resolve(check[1], nil, check[2])
 		if id then
 			vim.health.ok(check[1] .. " backend: " .. id)
-		elseif check[1] == "symbols" or check[1] == "doc_symbols" then
+		elseif
+			check[1] == "symbols"
+			or check[1] == "doc_symbols"
+			or check[1] == "references"
+			or check[1] == "implementations"
+		then
 			vim.health.info(check[1] .. " backend: no LSP client attached")
 		else
 			vim.health.warn(check[1] .. " backend: none available")
