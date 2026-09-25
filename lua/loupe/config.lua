@@ -1,5 +1,7 @@
 --- Loupe configuration: defaults + optional user overrides via setup().
 
+local keymap = require("loupe.keymap")
+
 local M = {}
 
 M.defaults = {
@@ -138,6 +140,26 @@ M.defaults = {
 
 M.values = nil
 
+--- Canonicalize every lhs in a `mappings` table to the form `keytrans()`
+--- emits, so a user's `<C-o>` overrides the default `<C-O>` instead of
+--- sitting beside it. `tbl_deep_extend` matches raw strings, so this has to
+--- happen before the merge; dispatch canonicalizes again, harmlessly.
+local function canonical_mappings(mappings)
+	local out = {}
+	for ctx, map in pairs(mappings) do
+		if type(map) == "table" then
+			local canon = {}
+			for lhs, action in pairs(map) do
+				canon[keymap.canonical(lhs)] = action
+			end
+			out[ctx] = canon
+		else
+			out[ctx] = map
+		end
+	end
+	return out
+end
+
 --- Lazily build the effective config (defaults, or defaults merged by setup()).
 function M.get()
 	if not M.values then
@@ -148,7 +170,11 @@ end
 
 --- Merge user options over the defaults.
 function M.setup(opts)
-	M.values = vim.tbl_deep_extend("force", {}, M.defaults, opts or {})
+	opts = vim.tbl_extend("force", {}, opts or {})
+	if type(opts.mappings) == "table" then
+		opts.mappings = canonical_mappings(opts.mappings)
+	end
+	M.values = vim.tbl_deep_extend("force", {}, M.defaults, opts)
 	return M.values
 end
 

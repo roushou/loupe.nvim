@@ -39,3 +39,16 @@ h.test("resolve tolerates a missing mappings table", function()
 	h.eq(maps.browse, {})
 	h.eq(maps.sources, {})
 end)
+
+h.test("setup canonicalizes binding keys so a lower-case unbind overrides the default", function()
+	-- The defaults spell control keys upper-case (`<C-O>`), but people write
+	-- `<C-o>`. The merge matches raw strings, so setup() must canonicalize
+	-- before merging or the unbind silently sits beside the default.
+	config.setup({ mappings = { browse = { ["<C-o>"] = false, ["<C-g>"] = "sources" } } })
+	local maps = keymap.resolve(config.get().mappings)
+	config.setup({}) -- restore the defaults for the tests that follow
+	h.eq(maps.browse["<C-O>"], nil, "the lower-case unbind must remove the default <C-O>")
+	h.eq(maps.browse["<C-G>"], "sources", "the new binding survives")
+	h.eq(maps.browse["<C-R>"], "root", "untouched defaults survive")
+	h.eq(maps.browse["<CR>"], "open")
+end)
